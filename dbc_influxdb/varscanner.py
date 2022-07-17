@@ -1,11 +1,12 @@
 from pathlib import Path
 
 import pandas as pd
-from dbc_influxdb.common import tags
-from dbc_influxdb.db import get_client
 from influxdb_client import WriteOptions
 from numpy import arange
 from pandas import DataFrame
+
+from dbc_influxdb.common import tags
+from dbc_influxdb.db import get_client
 
 
 class VarScanner:
@@ -197,7 +198,8 @@ class VarScanner:
         write_api.write(newvar['db_bucket'],
                         record=var_df,
                         data_frame_measurement_name=newvar['measurement'],
-                        data_frame_tag_columns=tags)
+                        data_frame_tag_columns=tags,
+                        write_precision='s')
 
     def _init_varentry(self, rawvar) -> dict:
         """Collect variable info"""

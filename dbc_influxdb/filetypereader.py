@@ -19,10 +19,24 @@ class FileTypeReader():
                  filetype: str,
                  filetypeconf: dict,
                  nrows=None,
-                 logger: Logger = None):
+                 logger: Logger = None,
+                 timezone: str = None or str):
+        """
+
+        :param filepath:
+        :param filetype:
+        :param filetypeconf:
+        :param nrows:
+        :param logger:
+        :param timezone: If 'None', no timezone info is added. Otherwise can be `str`
+                that describes the timezone in relation to UTC in the format:
+                'UTC+01:00' (for CET), 'UTC+02:00' (for CEST), ...
+
+        """
         self.filepath = filepath
         self.filetype = filetype
         self.logger = logger
+        self.timezone = timezone  # v0.3.0
 
         self.data_df = pd.DataFrame()
 
@@ -337,7 +351,6 @@ class FileTypeReader():
         try:
             # todo read header separately like in diive
             df = pd.read_csv(**args)
-            # print(df.head(5))
         except ValueError:
             # Found to occur when the first row is empty and the
             # second row has errors (e.g., too many columns).
@@ -353,6 +366,10 @@ class FileTypeReader():
             # and then the erroneous row is skipped (1).
             args['skiprows'] = [0, 1]
             df = pd.read_csv(**args)
+
+        # Add timezone info
+        # see: https://www.atmos.albany.edu/facstaff/ktyle/atm533/core/week5/04_Pandas_DateTime.html#note-that-the-timezone-is-missing-the-read-csv-method-does-not-provide-a-means-to-specify-the-timezone-we-can-take-care-of-that-though-with-the-tz-localize-method
+        df.index = df.index.tz_localize(self.timezone)  # v0.3.0
 
         return df
 
