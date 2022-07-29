@@ -2,13 +2,12 @@
 from pathlib import Path
 
 import dateutil.parser as parser
-import pytz
 import yaml
 from influxdb_client import WriteOptions
 from pandas import DataFrame
 
 import dbc_influxdb.fluxql as fluxql
-from dbc_influxdb.common import tags
+from dbc_influxdb.common import tags, convert_ts_to_timezone
 from dbc_influxdb.db import get_client, get_query_api
 from dbc_influxdb.filetypereader import FileTypeReader, get_conf_filetypes, read_configfile
 from dbc_influxdb.varscanner import VarScanner
@@ -39,7 +38,22 @@ class dbcInflux:
     def upload_singlevar(self,
                          var_df: DataFrame,
                          to_bucket: str,
-                         to_measurement: str):
+                         to_measurement: str,
+                         timezone_of_timestamp: str):
+        """Upload single variable to database
+
+        The database needs to know the timezone because all data in the db are
+        stored in UTC/GMT.
+
+        :param var_df: contains measured variable data and tags (data_detailed)
+        :param to_bucket: name of database bucket
+        :param to_measurement: name of measurement, e.g. 'TA'
+        :param timezone_of_timestamp: e.g. 'UTC+01:00', see docstring in `.add_timezone_info' for more details
+        :return:
+        """
+
+        # Add timezone info
+        var_df.index = self.add_timezone_info(timestamp_index=var_df.index, timezone_of_timestamp=timezone_of_timestamp)
 
         # Database clients
         print("Connecting to database ...")
@@ -89,6 +103,7 @@ class dbcInflux:
                         fileinfo: dict,
                         to_bucket: str,
                         filetypeconf: dict,
+                        timezone_of_timestamp: str,
                         parse_var_pos_indices: bool = True,
                         logger=None) -> DataFrame:
         """Upload data from file
@@ -96,7 +111,20 @@ class dbcInflux:
         Primary method to automatically upload data from files to
         the database with the 'dataflow' package.
 
+        :param file_df:
+        :param data_version:
+        :param fileinfo:
+        :param to_bucket:
+        :param filetypeconf:
+        :param parse_var_pos_indices:
+        :param logger:
+        :param timezone_of_timestamp: e.g. 'UTC+01:00', see docstring in `.add_timezone_info' for more details
+        :return:
         """
+
+        # Add timezone info
+        file_df.index = self.add_timezone_info(timestamp_index=file_df.index,
+                                               timezone_of_timestamp=timezone_of_timestamp)
 
         varscanner = VarScanner(file_df=file_df,
                                 data_version=data_version,
@@ -110,6 +138,21 @@ class dbcInflux:
         varscanner.run()
         return varscanner.get_results()
 
+    def add_timezone_info(self, timestamp_index, timezone_of_timestamp: str):
+        """Add timezone info to timestamp index
+
+        No data are changed, only the timezone info is added to the timestamp.
+
+        :param: timezone_of_timestamp: If 'None', no timezone info is added. Otherwise
+            can be `str` that describes the timezone in relation to UTC in the format:
+            'UTC+01:00' (for CET), 'UTC+02:00' (for CEST), ...
+            InfluxDB uses this info to upload data (always) in UTC/GMT.
+
+        see: https://www.atmos.albany.edu/facstaff/ktyle/atm533/core/week5/04_Pandas_DateTime.html#note-that-the-timezone-is-missing-the-read-csv-method-does-not-provide-a-means-to-specify-the-timezone-we-can-take-care-of-that-though-with-the-tz-localize-method
+
+        """
+        return timestamp_index.tz_localize(timezone_of_timestamp)  # v0.3.1
+
     # def query(self, func, *args, **kwargs):
     #     client = get_client(self.conf_db)
     #     query_api = get_query_api(client)
@@ -118,20 +161,41 @@ class dbcInflux:
 
     def download(self,
                  bucket: str,
-                 measurement: list,
-                 field: list,
+                 measurements: list,
+                 fields: list,
                  start: str,
                  stop: str,
                  timezone_offset_to_utc_hours: int,  # v0.3.0
-                 data_version: str = None) -> tuple[DataFrame, dict]:
+                 data_version: str) -> tuple[DataFrame, dict, dict]:
         """Get data from database between 'start' and 'stop' dates
 
-        The 'stop' date is not included.
+        The exact 'stop' date is NOT included.
+
+        The args 'start' and 'stop' dates are in relation to the same timezone
+        as defined in 'timezone_offset_to_utc_hours'. This means that if the offset
+        is e.g. '1' for CET, then the dates are also understood to be in the same
+        timezone, e.g. CET.
+
+        :param bucket: name of bucket in database
+        :param measurements: list of measurements in database, e.g. ['TA', 'SW']
+        :param fields: list of fields (variable names)
+        :param start: start date, e.g. '2022-07-04 00:30:00'
+        :param stop: stop date, e.g. '2022-07-05 12:00:00'
+        :param timezone_offset_to_utc_hours: convert the UTC timestamp from the
+            database to this timezone offset, e.g. if '1' then data are downloaded
+            and returned with the timestamp 'UTC+01:00', i.e. UTC + 1 hour, which
+            corresponds to CET (winter time)
+        :param data_version: version ID of the data that should be downloaded,
+            e.g. 'meteoscreening'
         """
 
-        # TODO data version required!
+        print(f"Downloading from bucket {bucket}:\n"
+              f"    variables {fields} from measurements {measurements}\n"
+              f"    between {start} and {stop}\n"
+              f"    in data version {data_version}\n"
+              f"    with timezone offset to UTC of {timezone_offset_to_utc_hours}")
 
-        # InfluxDB needs ISO 8601 date format for query
+        # InfluxDB needs ISO 8601 date format (in requested timezone) for query
         start_iso = self._convert_datestr_to_iso8601(datestr=start,
                                                      timezone_offset_to_utc_hours=timezone_offset_to_utc_hours)
         stop_iso = self._convert_datestr_to_iso8601(datestr=stop,
@@ -140,8 +204,8 @@ class dbcInflux:
         # Assemble query
         bucketstring = fluxql.bucketstring(bucket=bucket)
         rangestring = fluxql.rangestring(start=start_iso, stop=stop_iso)
-        measurementstring = fluxql.filterstring(queryfor='_measurement', querylist=measurement, type='or')
-        fieldstring = fluxql.filterstring(queryfor='_field', querylist=field, type='or')
+        measurementstring = fluxql.filterstring(queryfor='_measurement', querylist=measurements, type='or')
+        fieldstring = fluxql.filterstring(queryfor='_field', querylist=fields, type='or')
         dropstring = fluxql.dropstring()
         pivotstring = fluxql.pivotstring()
 
@@ -181,25 +245,13 @@ class dbcInflux:
             table.rename(columns={"_time": "TIMESTAMP_UTC_END"}, inplace=True)
             table['TIMESTAMP_END'] = table['TIMESTAMP_UTC_END'].copy()
 
-            # TIMEZONE!
-            # Convert 'TIMESTAMP_END' to desired timezone, e.g. to CET,
-            # using the pytz package. pytz is quite flexible with GMT and fixed offsets,
-            # and GMT is the same as UTC (no offset to UTC).
-            # From: https://pvlib-python.readthedocs.io/en/v0.3.0/timetimezones.html#fixed-offsets:
-            #   "The 'Etc/GMT*' time zones mentioned above provide fixed offset
-            #   specifications, but watch out for the counter-intuitive sign convention."
-            # This will be the main timestamp.
+            # TIMEZONE: convert timestamp index to required timezone
+            table['TIMESTAMP_END'] = convert_ts_to_timezone(
+                timezone_offset_to_utc_hours=timezone_offset_to_utc_hours,
+                timestamp_index=table['TIMESTAMP_END'])
 
-            # Sign convention in pytz is reversed: '+1' for CET must be '-1' when used with GMT here
-            sign = '-' if timezone_offset_to_utc_hours >= 0 else '+'
-
-            # Specify pytz timezone in relation to the GMT timezone (same as UTC)
-            requested_timezone_pytz = f'Etc/GMT{sign}{timezone_offset_to_utc_hours}'
-
-            # Convert TIMESTAMP_END to requested timezone
-            table['TIMESTAMP_END'] = table['TIMESTAMP_END'].dt.tz_convert(pytz.timezone(requested_timezone_pytz))
-
-            # Remove timezone info from TIMESTAMP_END
+            # Remove timezone info in timestamp from TIMESTAMP_END
+            # -> download clean timestamp without timestamp info
             table['TIMESTAMP_END'] = table['TIMESTAMP_END'].dt.tz_localize(None)  # Timezone!
 
             # Set TIMESTAMP_END as the main index
@@ -213,7 +265,7 @@ class dbcInflux:
             table.drop('TIMESTAMP_UTC_END', axis=1, inplace=True)
 
             # Detect of which variable the frame contains data
-            field_in_table = [f for f in field if f in table.columns]
+            field_in_table = [f for f in fields if f in table.columns]
 
             # Store frame in dict with the field (variable name) as key
             # This way the table (data) of each variable can be accessed by
@@ -236,9 +288,13 @@ class dbcInflux:
             print(f"    {key}   ({num_records} records)     "
                   f"first date: {first_date}    last date: {last_date}")
 
-        return data_simple, data_detailed
+        assigned_measurements = self.detect_measurement_for_field(bucket=bucket,
+                                                                  measurementslist=measurements,
+                                                                  varnameslist=list(data_detailed.keys()))
 
-    def readfile(self, filepath: str, filetype: str, nrows=None, logger=None, timezone=None):
+        return data_simple, data_detailed, assigned_measurements
+
+    def readfile(self, filepath: str, filetype: str, nrows=None, logger=None, timezone_of_timestamp=None):
         # Read data of current file
         logtxt = f"[{self.script_id}] Reading file {filepath} ..."
         logger.info(logtxt) if logger else print(logtxt)
@@ -246,8 +302,7 @@ class dbcInflux:
         file_df, fileinfo = FileTypeReader(filepath=filepath,
                                            filetype=filetype,
                                            filetypeconf=filetypeconf,
-                                           nrows=nrows,
-                                           timezone=timezone).get_data()
+                                           nrows=nrows).get_data()
         return file_df, filetypeconf, fileinfo
 
     def _read_configs(self):
@@ -316,6 +371,26 @@ class dbcInflux:
 
     def show_config_for_filetype(self, filetype: str) -> dict:
         return self.conf_filetypes[filetype]
+
+    def detect_measurement_for_field(self, bucket: str, measurementslist: list, varnameslist: list) -> dict:
+        """Detect measurement group of variable
+
+        Helper function because the query in FluxQL (InfluxDB query language) does not return
+        the measurement group of the field. Used e.g. in diive meteoscreening, where info
+        about the measurement group is important.
+
+        :param bucket: name of database bucket, e.g. "ch-dav_raw"
+        :param measurementslist: list of measurements, e.g. "['TA', 'SW', 'LW']"
+        :param varnameslist: list of variable names, e.g. "[TA_T1_35_1, SW_IN_T1_35_1]"
+        :return:
+        """
+        assigned_measurements = {}
+        for m in measurementslist:
+            fieldslist = self.show_fields_in_measurement(bucket=bucket, measurement=m)
+            for var in varnameslist:
+                if var in fieldslist:
+                    assigned_measurements[var] = m
+        return assigned_measurements
 
     def show_fields_in_measurement(self, bucket: str, measurement: str) -> list:
         """Show fields (variable names) in measurement"""
@@ -496,9 +571,11 @@ def example():
     # var_df.index = pd.to_datetime(var_df.index)
     # # testdata.plot()
 
+    # # ====================
     # # UPLOAD SPECIFIC FILE
-    #
-    # to_bucket = 'ch-oe2_processing'
+    # # ====================
+    # to_bucket = 'test'
+    # # to_bucket = 'ch-oe2_processing'
     # filepath = r'L:\Dropbox\luhk_work\40 - DATA\FLUXNET-WW2020_RELEASE-2022-1\FLX_CH-Oe2_FLUXNET2015_FULLSET_2004-2020_beta-3\FLX_CH-Oe2_FLUXNET2015_FULLSET_HH_2004-2020_beta-3.csv'
     #
     # # to_bucket = 'test'
@@ -506,46 +583,54 @@ def example():
     # dirconf = r'L:\Dropbox\luhk_work\20 - CODING\22 - POET\configs'
     # filetype = 'PROC-FLUXNET-FULLSET-HH-CSV-30MIN'
     # dbc = dbcInflux(dirconf=dirconf)
-    # df, filetypeconf, fileinfo = dbc_influxdb.readfile(filepath=filepath,
+    # df, filetypeconf, fileinfo = dbc.readfile(filepath=filepath,
     #                                           filetype=filetype,
-    #                                           nrows=None)
-    # varscanner_df = dbc_influxdb.upload(to_bucket=to_bucket,
-    #                            file_df=df,
-    #                            filetypeconf=filetypeconf,
-    #                            fileinfo=fileinfo,
-    #                            data_version=data_version,
-    #                            parse_var_pos_indices=False)
+    #                                           nrows=100,
+    #                                           timezone_of_timestamp='UTC+01:00')
+    # varscanner_df = dbc.upload_filetype(to_bucket=to_bucket,
+    #                                     file_df=df,
+    #                                     filetypeconf=filetypeconf,
+    #                                     fileinfo=fileinfo,
+    #                                     data_version=data_version,
+    #                                     parse_var_pos_indices=filetypeconf['data_vars_parse_pos_indices'])
     # print(varscanner_df)
 
-    dirconf = r'L:\Dropbox\luhk_work\20 - CODING\22 - POET\configs'
-    dbc = dbcInflux(dirconf=dirconf)
-    # [print(f"- {k}") for k in dbc.show_configs_filetypes().keys()]
-    # dbc.show_buckets()
-    # dbc.show_measurements_in_bucket(bucket='ch-aws_raw')
-    # dbc.show_fields_in_bucket(bucket='ch-aws_raw')
-    # dbc.show_fields_in_measurement(bucket='ch-lae_raw', measurement='SW')
-    # # dbc.show_configs_filetypes()
+    # dirconf = r'L:\Dropbox\luhk_work\20 - CODING\22 - POET\configs'
+    # dbc = dbcInflux(dirconf=dirconf)
+    # # [print(f"- {k}") for k in dbc.show_configs_filetypes().keys()]
+    # # dbc.show_buckets()
+    # # dbc.show_measurements_in_bucket(bucket='ch-aws_raw')
+    # # dbc.show_fields_in_bucket(bucket='ch-aws_raw')
+    # dbc.show_fields_in_measurement(bucket='ch-dav_raw', measurement='SWC')
+    # # # dbc.show_configs_filetypes()
 
-    # data_simple, data_detailed = dbc.download(bucket='ch-aws_raw',
-    #                                           measurement=['TA'],
-    #                                           field=['TA_M1B1_1.50_1'],
-    #                                           start='2022-05-01 00:01:00',
-    #                                           stop='2022-06-01 00:01:00')
-    # print(data_detailed)
+    # =============
+    # DOWNLOAD DATA
+    # =============
 
-    # Download
-    tables_dict, \
-    fields_df = \
-        dbc.download(bucket='test',
-                     measurement=['TA'],
-                     field=['TA_NABEL_T1_35_1'],
-                     start='2022-07-01 00:00:00',
-                     stop='2022-07-03 00:30:00',
-                     timezone_offset_to_utc_hours=1,  # start and stop are understood as utc+1
-                     data_version='raw')
-    print(fields_df)
+    # Settings
+    BUCKET = 'test'
+    MEASUREMENTS = ['TA']
+    FIELDS = ['TA_PRF_T1_35_1']
+    START = '2022-07-20 00:00:10'
+    STOP = '2022-07-21 00:00:10'
+    TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # We need returned timestamps in CET (winter time), which is UTC + 1 hour
+    DATA_VERSION = 'raw'
 
-    # dbc.upload_singlevar(var_df=var_df, to_bucket='test', to_measurement='TA')
+    DIRCONF = r'L:\Dropbox\luhk_work\20 - CODING\22 - POET\configs'
+    dbc = dbcInflux(dirconf=DIRCONF)
+
+    data_simple, data_detailed, assigned_measurements = \
+        dbc.download(
+            bucket=BUCKET,
+            measurements=MEASUREMENTS,
+            fields=FIELDS,
+            start=START,
+            stop=STOP,
+            timezone_offset_to_utc_hours=TIMEZONE_OFFSET_TO_UTC_HOURS,
+            data_version=DATA_VERSION
+        )
+    print(data_detailed)
 
 
 if __name__ == '__main__':

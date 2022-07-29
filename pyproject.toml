@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "dbc-influxdb"
-version = "0.3.0"
+version = "0.4.0"
 description = "Database communication: show, download and upload data. Works with InfluxDB 2.x."
 authors = ["holukas <lukas.hoertnagl@usys.ethz.ch>"]
 

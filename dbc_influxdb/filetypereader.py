@@ -19,8 +19,7 @@ class FileTypeReader():
                  filetype: str,
                  filetypeconf: dict,
                  nrows=None,
-                 logger: Logger = None,
-                 timezone: str = None or str):
+                 logger: Logger = None):
         """
 
         :param filepath:
@@ -28,15 +27,11 @@ class FileTypeReader():
         :param filetypeconf:
         :param nrows:
         :param logger:
-        :param timezone: If 'None', no timezone info is added. Otherwise can be `str`
-                that describes the timezone in relation to UTC in the format:
-                'UTC+01:00' (for CET), 'UTC+02:00' (for CEST), ...
 
         """
         self.filepath = filepath
         self.filetype = filetype
         self.logger = logger
-        self.timezone = timezone  # v0.3.0
 
         self.data_df = pd.DataFrame()
 
@@ -146,6 +141,7 @@ class FileTypeReader():
 
         # Columns
         self._remove_unnamed_cols()
+
 
     def _convert_to_float_or_string(self):
         """Convert data to float or string
@@ -366,10 +362,6 @@ class FileTypeReader():
             # and then the erroneous row is skipped (1).
             args['skiprows'] = [0, 1]
             df = pd.read_csv(**args)
-
-        # Add timezone info
-        # see: https://www.atmos.albany.edu/facstaff/ktyle/atm533/core/week5/04_Pandas_DateTime.html#note-that-the-timezone-is-missing-the-read-csv-method-does-not-provide-a-means-to-specify-the-timezone-we-can-take-care-of-that-though-with-the-tz-localize-method
-        df.index = df.index.tz_localize(self.timezone)  # v0.3.0
 
         return df
 

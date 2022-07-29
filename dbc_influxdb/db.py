@@ -6,7 +6,7 @@ from influxdb_client import InfluxDBClient
 
 def get_client(conf_db: dict):
     client = InfluxDBClient(url=conf_db['url'], token=conf_db['token'], org=conf_db['org'],
-                            timeout=20_000, enable_gzip=True)
+                            timeout=999_000, enable_gzip=True)
     return client
 
 
