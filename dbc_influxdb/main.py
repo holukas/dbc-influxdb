@@ -238,6 +238,7 @@ class dbcInflux:
         data_detailed = {}  # Stores variables and their tags
         data_simple = DataFrame()  # Stores variables
         for ix, table in enumerate(tables):
+
             table.drop(columns=['result', 'table'], inplace=True)
 
             # Queries are always returned w/ UTC timestamp
@@ -257,6 +258,12 @@ class dbcInflux:
             # Set TIMESTAMP_END as the main index
             table.set_index("TIMESTAMP_END", inplace=True)
             table.sort_index(inplace=True)
+
+            # Remove duplicated index entries, v0.4.1
+            # This can happen if the variable is logged in a new file, but the
+            # old file is still active and also contains data for the var.
+            # In this case, keep the last data entry.
+            table = table[~table.index.duplicated(keep='last')]
 
             # Remove timezone info from UTC timestamp, header already states it's UTC
             table['TIMESTAMP_UTC_END'] = table['TIMESTAMP_UTC_END'].dt.tz_localize(None)  # Timezone!
@@ -463,7 +470,6 @@ class dbcInflux:
             # data = yaml.load(f, Loader=SafeLoader)
         return data
 
-
 # def show_settings(self):
 #     print("Currently selected:")
 #     print(f"    Bucket: {self.bucket}")
@@ -560,78 +566,3 @@ class dbcInflux:
 #     # results.set_index("_time", inplace=True)
 #     df = pd.pivot(results, index='TIMESTAMP_END', columns='_field', values='_value')
 #     return results
-
-def example():
-    # # Testing MeteoScreeningFromDatabase
-    # # Example file from dbget output
-    # import pandas as pd
-    # testfile = r'L:\Dropbox\luhk_work\20 - CODING\26 - NOTEBOOKS\meteoscreening\test_qc.csv'
-    # var_df = pd.read_csv(testfile)
-    # var_df.set_index('TIMESTAMP_END', inplace=True)
-    # var_df.index = pd.to_datetime(var_df.index)
-    # # testdata.plot()
-
-    # # ====================
-    # # UPLOAD SPECIFIC FILE
-    # # ====================
-    # to_bucket = 'test'
-    # # to_bucket = 'ch-oe2_processing'
-    # filepath = r'L:\Dropbox\luhk_work\40 - DATA\FLUXNET-WW2020_RELEASE-2022-1\FLX_CH-Oe2_FLUXNET2015_FULLSET_2004-2020_beta-3\FLX_CH-Oe2_FLUXNET2015_FULLSET_HH_2004-2020_beta-3.csv'
-    #
-    # # to_bucket = 'test'
-    # data_version = 'FLUXNET-WW2020_RELEASE-2022-1'
-    # dirconf = r'L:\Dropbox\luhk_work\20 - CODING\22 - POET\configs'
-    # filetype = 'PROC-FLUXNET-FULLSET-HH-CSV-30MIN'
-    # dbc = dbcInflux(dirconf=dirconf)
-    # df, filetypeconf, fileinfo = dbc.readfile(filepath=filepath,
-    #                                           filetype=filetype,
-    #                                           nrows=100,
-    #                                           timezone_of_timestamp='UTC+01:00')
-    # varscanner_df = dbc.upload_filetype(to_bucket=to_bucket,
-    #                                     file_df=df,
-    #                                     filetypeconf=filetypeconf,
-    #                                     fileinfo=fileinfo,
-    #                                     data_version=data_version,
-    #                                     parse_var_pos_indices=filetypeconf['data_vars_parse_pos_indices'])
-    # print(varscanner_df)
-
-    # dirconf = r'L:\Dropbox\luhk_work\20 - CODING\22 - POET\configs'
-    # dbc = dbcInflux(dirconf=dirconf)
-    # # [print(f"- {k}") for k in dbc.show_configs_filetypes().keys()]
-    # # dbc.show_buckets()
-    # # dbc.show_measurements_in_bucket(bucket='ch-aws_raw')
-    # # dbc.show_fields_in_bucket(bucket='ch-aws_raw')
-    # dbc.show_fields_in_measurement(bucket='ch-dav_raw', measurement='SWC')
-    # # # dbc.show_configs_filetypes()
-
-    # =============
-    # DOWNLOAD DATA
-    # =============
-
-    # Settings
-    BUCKET = 'test'
-    MEASUREMENTS = ['TA']
-    FIELDS = ['TA_PRF_T1_35_1']
-    START = '2022-07-20 00:00:10'
-    STOP = '2022-07-21 00:00:10'
-    TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # We need returned timestamps in CET (winter time), which is UTC + 1 hour
-    DATA_VERSION = 'raw'
-
-    DIRCONF = r'L:\Dropbox\luhk_work\20 - CODING\22 - POET\configs'
-    dbc = dbcInflux(dirconf=DIRCONF)
-
-    data_simple, data_detailed, assigned_measurements = \
-        dbc.download(
-            bucket=BUCKET,
-            measurements=MEASUREMENTS,
-            fields=FIELDS,
-            start=START,
-            stop=STOP,
-            timezone_offset_to_utc_hours=TIMEZONE_OFFSET_TO_UTC_HOURS,
-            data_version=DATA_VERSION
-        )
-    print(data_detailed)
-
-
-if __name__ == '__main__':
-    example()

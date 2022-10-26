@@ -3,6 +3,7 @@ import os
 from logging import Logger
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import yaml
 
@@ -129,6 +130,14 @@ class FileTypeReader():
         # todo check if this works Numeric data only
         self._to_numeric()
 
+        # Sanitize data
+        # Replace inf and -inf with NAN v0.7.0
+        # Sometimes inf or -inf can appear, they are interpreted
+        # as some sort of number (i.e., the column dtype does not
+        # become 'object' and they are not a string) but cannot be
+        # handled.
+        self.data_df.replace([np.inf, -np.inf], np.nan, inplace=True)
+
         # Timestamp
         if self.build_timestamp:
             self.data_df = self._build_timestamp()
@@ -141,7 +150,6 @@ class FileTypeReader():
 
         # Columns
         self._remove_unnamed_cols()
-
 
     def _convert_to_float_or_string(self):
         """Convert data to float or string

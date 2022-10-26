@@ -1,6 +1,14 @@
 # Changelog
 
 
+## v0.5.0 | 26 Oct 2022
+
+- Added new module `manual_run` that collects code that can be used to manually upload
+and download files.
+- Duplicate index entries in table data downloaded from database are now removed, the last
+data point is kept (`keep=last`). 
+
+
 ## v0.4.0 | 29 Jul 2022
 
 ### Better handling of timezone info during upload
