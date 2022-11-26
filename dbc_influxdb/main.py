@@ -100,6 +100,7 @@ class dbcInflux:
     def upload_filetype(self,
                         file_df: DataFrame,
                         data_version: str,
+                        data_vars: dict,
                         fileinfo: dict,
                         to_bucket: str,
                         filetypeconf: dict,
@@ -128,6 +129,7 @@ class dbcInflux:
 
         varscanner = VarScanner(file_df=file_df,
                                 data_version=data_version,
+                                data_vars=data_vars,
                                 fileinfo=fileinfo,
                                 filetypeconf=filetypeconf,
                                 conf_unitmapper=self.conf_unitmapper,
@@ -306,11 +308,11 @@ class dbcInflux:
         logtxt = f"[{self.script_id}] Reading file {filepath} ..."
         logger.info(logtxt) if logger else print(logtxt)
         filetypeconf = self.conf_filetypes[filetype]
-        file_df, fileinfo = FileTypeReader(filepath=filepath,
+        df_list, fileinfo = FileTypeReader(filepath=filepath,
                                            filetype=filetype,
                                            filetypeconf=filetypeconf,
                                            nrows=nrows).get_data()
-        return file_df, filetypeconf, fileinfo
+        return df_list, filetypeconf, fileinfo
 
     def _read_configs(self):
 

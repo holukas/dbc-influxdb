@@ -16,6 +16,7 @@ class VarScanner:
             self,
             file_df: DataFrame,
             data_version: str,
+            data_vars: dict,
             fileinfo: dict,
             filetypeconf: dict,
             conf_unitmapper: dict,
@@ -26,6 +27,7 @@ class VarScanner:
     ):
         self.file_df = file_df
         self.data_version = data_version
+        self.data_vars = data_vars
         self.fileinfo = fileinfo
         self.filetypeconf = filetypeconf
         self.conf_unitmapper = conf_unitmapper
@@ -149,7 +151,7 @@ class VarScanner:
         #     original units ('raw_units') in df.
         #   - Special formats have *renamed* varnames ('field') and
         #     original units ('raw_units') in df.
-        varcol = 'raw_varname' if not newvar['special_format'] else 'field'
+        varcol = 'raw_varname' if not newvar['special_format'] == '-ICOSSEQ-' else 'field'
         varcol = (newvar[varcol], newvar['raw_units'])  # Column name to access var in df
         var_df = pd.DataFrame(index=df.index, data=df[varcol])
 
@@ -245,7 +247,7 @@ class VarScanner:
         newvar = self._init_varentry(rawvar=rawvar)
 
         # Get var settings from configuration
-        if rawvar[0] in self.filetypeconf['data_vars'].keys():
+        if rawvar[0] in self.data_vars.keys():
             # Variable name in file data is the same as given in settings
             newvar, assigned_units, gain, is_greenlit = \
                 self._match_exact_name(newvar=newvar, filetypeconf=self.filetypeconf, rawvar=rawvar)
@@ -262,16 +264,16 @@ class VarScanner:
             # be given with the *exact* name in the config file.
 
             # Assigned units from config file and measurement
-            for dv in self.filetypeconf['data_vars']:
+            for dv in self.data_vars:
                 if rawvar[0].startswith(dv):
                     newvar['raw_varname'] = f"{dv}"
-                    newvar['measurement'] = self.filetypeconf['data_vars'][dv]['measurement']
+                    newvar['measurement'] = self.data_vars[dv]['measurement']
                     newvar['field'] = rawvar[0]  # Already correct name
-                    assigned_units = self.filetypeconf['data_vars'][dv]['units']
+                    assigned_units = self.data_vars[dv]['units']
 
                     # Gain from config file if provided, else set to 1
-                    gain = self.filetypeconf['data_vars'][dv]['gain'] \
-                        if 'gain' in self.filetypeconf['data_vars'][dv] else 1
+                    gain = self.data_vars[dv]['gain'] \
+                        if 'gain' in self.data_vars[dv] else 1
 
                     # Indicate that var was found in config file
                     is_greenlit = True
@@ -324,31 +326,28 @@ class VarScanner:
         """Match variable name from data with variable name from settings ('data_vars')"""
         # If rawvar is given as variable in data_vars
         newvar['raw_varname'] = rawvar[0]
-        newvar['measurement'] = filetypeconf['data_vars'][rawvar[0]]['measurement']
+        newvar['measurement'] = self.data_vars[rawvar[0]]['measurement']
 
         # Naming convention: variable name
-        newvar['field'] = self.get_varname_naming_convention(
-            raw_varname=newvar['raw_varname'],
-            filetypeconf=filetypeconf)
+        newvar['field'] = self.get_varname_naming_convention(raw_varname=newvar['raw_varname'])
 
         # Assigned units from config file
-        assigned_units = filetypeconf['data_vars'][rawvar[0]]['units']
+        assigned_units = self.data_vars[rawvar[0]]['units']
 
         # Gain from config file if provided, else set to 1
-        gain = filetypeconf['data_vars'][rawvar[0]]['gain'] \
-            if 'gain' in filetypeconf['data_vars'][rawvar[0]] else 1
+        gain = self.data_vars[rawvar[0]]['gain'] \
+            if 'gain' in self.data_vars[rawvar[0]] else 1
 
         # Indicate that var was found in config file
         is_greenlit = True
 
         return newvar, assigned_units, gain, is_greenlit
 
-    @staticmethod
-    def get_varname_naming_convention(raw_varname, filetypeconf) -> str:
+    def get_varname_naming_convention(self, raw_varname) -> str:
         """Map standarized naming convention varname to raw varname, stored as *field* in db"""
-        if raw_varname in filetypeconf['data_vars']:
-            field = filetypeconf['data_vars'][raw_varname]['field'] \
-                if filetypeconf['data_vars'][raw_varname]['field'] else raw_varname
+        if raw_varname in self.data_vars:
+            field = self.data_vars[raw_varname]['field'] \
+                if self.data_vars[raw_varname]['field'] else raw_varname
         else:
             field = '-not-defined-'
         return field
