@@ -2,6 +2,7 @@
 from pathlib import Path
 
 import dateutil.parser as parser
+import pandas as pd
 import yaml
 from influxdb_client import WriteOptions
 from pandas import DataFrame
@@ -276,17 +277,48 @@ class dbcInflux:
             # Detect of which variable the frame contains data
             field_in_table = [f for f in fields if f in table.columns]
 
+            key = field_in_table[0]
+
+            # Collect variables without tags in a separate (simplified) dataframe.
+            # This dataframe only contains the timestamp and the data column of each var.
+            # :: refactored in v0.7.0
+            # Add new column if column does not exist in current df
+            incomingdata = pd.DataFrame(table[key])
+            data_simple = data_simple.combine_first(incomingdata)
+            data_simple = data_simple[~data_simple.index.duplicated(keep='last')]
+            # if ix == 0:
+            #     data_simple = table[[key]].copy()
+            # else:
+            #     if key not in data_simple.columns:
+            #         data_simple[key] = table[[key]].copy()
+            #     else:
+            #         # If var already exists as column in df, merge
+            #         # incoming data with the data that are already in df.
+            #         incomingdata = pd.DataFrame(table[key])
+            #         data_simple = data_simple.combine_first(incomingdata)
+            #
+            #         # Remove duplicates from incoming data
+            #         data_simple = data_simple[~data_simple.index.duplicated(keep='last')]
+
             # Store frame in dict with the field (variable name) as key
             # This way the table (data) of each variable can be accessed by
             # field name, i.e., variable name.
-            data_detailed[field_in_table[0]] = table
-
-            # Collect variables without tags in a separate (simplified) dataframe.
-            # This dataframe only contains the timestamp and the data of each var.
-            if ix == 0:
-                data_simple = table[[field_in_table[0]]].copy()
+            # Important: variables with different sets of tags are downloaded
+            # in their own table. Therefore, if a variable TA_T1_X_1 has e.g.
+            # different time resolutions it is downloaded as multiple tables.
+            # Since the table is stored with the name of the variable, it is
+            # thus necessary to check whether a table with the name of the
+            # var already exists in the dict 'data_detailed'. If yes, the table
+            # is added (.combine_first) to the already existing table. It is also
+            # necessary to check whether there are index duplicated present
+            # after the table merging.
+            # :: added in v0.7.0
+            if key not in data_detailed:
+                # Add table df as new dict entry
+                data_detailed[key] = table
             else:
-                data_simple[field_in_table[0]] = table[[field_in_table[0]]].copy()
+                data_detailed[key] = data_detailed[key].combine_first(table)
+                data_detailed[key] = data_detailed[key][~data_detailed[key].index.duplicated(keep='last')]
 
         # Info
         print(f"Downloaded data for {len(data_detailed)} variables:")
@@ -401,9 +433,9 @@ class dbcInflux:
                     assigned_measurements[var] = m
         return assigned_measurements
 
-    def show_fields_in_measurement(self, bucket: str, measurement: str) -> list:
+    def show_fields_in_measurement(self, bucket: str, measurement: str, days: int = 9999) -> list:
         """Show fields (variable names) in measurement"""
-        query = fluxql.fields_in_measurement(bucket=bucket, measurement=measurement)
+        query = fluxql.fields_in_measurement(bucket=bucket, measurement=measurement, days=days)
         client = get_client(self.conf_db)
         query_api = get_query_api(client)
         results = query_api.query_data_frame(query=query)

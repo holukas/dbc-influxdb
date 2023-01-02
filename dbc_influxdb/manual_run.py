@@ -83,16 +83,19 @@ def download():
     """
 
     # Settings
-    BUCKET = 'ch-fru_raw'
-    MEASUREMENTS = ['SW']
-    FIELDS = [
-        'SW_IN_T1_1_1',
-    ]
-    START = '2022-03-01 00:00:00'
-    STOP = '2022-05-01 00:00:10'
-    TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # We need returned timestamps in CET (winter time), which is UTC + 1 hour
-    DATA_VERSION = 'raw'
-    DIRCONF = r'L:\Dropbox\luhk_work\20 - CODING\22 - POET\configs'
+    SITE = 'ch-lae'  # Site name
+    TA1 = 'TA_T1_47_1'
+    TA2 = 'TA_T1_35_1'
+    TA3 = 'TA_T1_17.5_1'
+    DATA_VERSION = 'meteoscreening'
+    OUTFILE = f"CH-LAE_2020-2021_TA_20221201.csv"
+    DIRCONF = r'L:\Dropbox\luhk_work\20 - CODING\22 - POET\configs'  # Folder with configurations
+    MEASUREMENTS = ['TA']  # Measurement name, used to group similar variable together, e.g., 'TA' contains all air temperature variables
+    # FIELDS = [TA1]  # Variable name; InfluxDB stores variable names as '_field'
+    FIELDS = [TA1, TA2, TA3]  # Variable name; InfluxDB stores variable names as '_field'
+    START = '2020-01-01 00:30:00'  # Download data starting with this date
+    STOP = '2023-01-01 00:30:00'  # Download data before this date (the stop date itself is not included)
+    TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # Timezone, e.g. "1" is translated to timezone "UTC+01:00" (CET, winter time)
 
     # Instantiate class
     dbc = dbcInflux(dirconf=DIRCONF)
@@ -100,7 +103,7 @@ def download():
     # Data download
     data_simple, data_detailed, assigned_measurements = \
         dbc.download(
-            bucket=BUCKET,
+            bucket=f"{SITE}_processing",
             measurements=MEASUREMENTS,
             fields=FIELDS,
             start=START,
@@ -109,7 +112,8 @@ def download():
             data_version=DATA_VERSION
         )
 
-    data_simple.to_csv("M:\Downloads\_temp\del.csv")
+    # data_simple.to_csv("F:\Downloads\_temp\del.csv")
+    print(data_simple)
     print(data_simple)
 
 

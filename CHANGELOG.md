@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.7.0 | 2 Jan 2023
+
+### Changes
+
+- Refactored data download in `main.dbcInflux.download`, better check for duplicates
+- Showing fields in measurements now by default shows fields of the last 9999 days
+  in `main.dbcInflux.show_fields_in_measurement`
+- Updated all dependencies to their newest (possible) version
+
 ## v0.6 | 26 Nov 2022
 
 ### New special format -ALTERNATING-
@@ -37,20 +46,20 @@ To handle these files, `dbc` splits the file data based on IDs. From this, two d
 are built: one contains ID 225 data, and the other contains ID 1 data.
 
 This required quite a bit of refactoring because up to now `dbc` only needed to handle one dataframe
-per data file, and the `-ALTERNATING-` filetypes produce two dataframes per data file. These two 
-dataframes are returned in a list, such as `[dataframe1, dataframe2]`. 
+per data file, and the `-ALTERNATING-` filetypes produce two dataframes per data file. These two
+dataframes are returned in a list, such as `[dataframe1, dataframe2]`.
 
 This is quite different than before, when `dataframeX` was directly used as `dataframeX`. Now,
 the `dataframeX` is used in a list, i.e., as `[dataframeX]`. By using a list certain steps when
 preparing and uploading data can be kept consistent, no matter if it is one dataframe that
-contains all data from a file (`[dataframeX]`), or if the file data was split into two 
+contains all data from a file (`[dataframeX]`), or if the file data was split into two
 dataframes (`[dataframe1, dataframe2]`): in both cases it is a list.
 
 The general logic for handling `-ALTERNATING-` filetypes is, relating to the example above:
 
 - Read complete data file (contains IDs 225, 1 and other; 37 columns)
     - This results in 37 columns, because ID 225 (37 columns) has more columns than ID 1 (29 columns)
-      and `.read_csv()` from pandas assumes that this number is valid for all data rows. 
+      and `.read_csv()` from pandas assumes that this number is valid for all data rows.
 - Split data file into dataframe1 (contains only ID 225 data; 37 columns) and dataframe2 (ID 1; 37 columns)
 - Shorten to correct number of columns, based on variable names given in filetype settings:
     - dataframe1 --> 37 columns (based on variables given in filetype setting *data_vars*)

@@ -25,12 +25,29 @@ def filterstring(queryfor: str, querylist: list, type: str) -> str:
     return filterstring
 
 
-def fields_in_measurement(bucket: str, measurement: str) -> str:
+def fields_in_measurement(bucket: str, measurement: str, days: int = 9999) -> str:
+    """
+    Show all available fields in measurement
+
+    By default, the FluxQL function returns results from the
+    last 30d so it is necessary to set the 'start' parameter
+    to get ALL fields. Therefore, the start parameter is set
+    to -9999d to get all fields available for the last 9999 days.
+
+    Args:
+        bucket: bucket name in InfluxDB
+        measurement: name of the measurement, e.g. 'TA'
+        days: show fields of the last *days* days
+
+    Returns:
+        query string for FluxQL
+    """
     query = f'''
     import "influxdata/influxdb/schema"
     schema.measurementFieldKeys(
     bucket: "{bucket}",
-    measurement: "{measurement}")
+    measurement: "{measurement}",
+    start: -{days}d)
     '''
     return query
 
