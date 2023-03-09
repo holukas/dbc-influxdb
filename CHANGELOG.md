@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.8.0 | 9 Mar 2023
+
+- Implemented an option `ignore_after` to ignore data after a specific datetime.
+  This can be set in the `configs` file for each variable separately. If it is
+  not given in the settings, then `ignore_after` defaults to `None` and all
+  data are used. The main reason to implement this option is the observation
+  of sometimes overlapping files that contain a variable with the same name, i.e.,
+  there are duplicate entries for some timestamps. This is typically the case
+  when an old file format is approaching its end but continues to run while the
+  new filetype with the same variable is already active and logging. In such a
+  case data from the old format after a certain datetime can be ignored and
+  instead the new data are used.
+
 ## v0.7.0 | 2 Jan 2023
 
 ### Changes

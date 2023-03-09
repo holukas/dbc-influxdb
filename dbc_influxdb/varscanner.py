@@ -158,6 +158,13 @@ class VarScanner:
         # Apply gain (gain = 1 if no gain is specified in filetype settings)
         var_df[varcol] = var_df[varcol].multiply(newvar['gain'])
 
+        # Ignore data after the datetime given in `ignore_after`
+        if newvar['ignore_after']:
+            firstdate = var_df.index[0]
+            lastalloweddate = pd.to_datetime(newvar['ignore_after'],format= '%Y-%m-%d %H:%M:%S')
+            lastalloweddate = pd.Timestamp(newvar['ignore_after'], tz='UTC+01:00')
+            var_df = var_df.loc[firstdate:lastalloweddate].copy()
+
         # Remove units row (units stored as tag)
         var_df.columns = var_df.columns.droplevel(1)
 
@@ -249,7 +256,7 @@ class VarScanner:
         # Get var settings from configuration
         if rawvar[0] in self.data_vars.keys():
             # Variable name in file data is the same as given in settings
-            newvar, assigned_units, gain, is_greenlit = \
+            newvar, assigned_units, gain, is_greenlit, ignore_after = \
                 self._match_exact_name(newvar=newvar, filetypeconf=self.filetypeconf, rawvar=rawvar)
 
         elif self.fileinfo['special_format'] == '-ICOSSEQ-':
@@ -319,8 +326,10 @@ class VarScanner:
 
         newvar['varname'] = newvar['field']
         newvar['gain'] = gain
+        newvar['ignore_after'] = ignore_after
 
         return newvar, is_greenlit
+
 
     def _match_exact_name(self, newvar, filetypeconf, rawvar):
         """Match variable name from data with variable name from settings ('data_vars')"""
@@ -338,10 +347,16 @@ class VarScanner:
         gain = self.data_vars[rawvar[0]]['gain'] \
             if 'gain' in self.data_vars[rawvar[0]] else 1
 
+        # ignore_after date from config file, else set to None
+        if 'ignore_after' in self.data_vars[rawvar[0]]:
+            ignore_after = self.data_vars[rawvar[0]]['ignore_after']
+        else:
+            ignore_after = None
+
         # Indicate that var was found in config file
         is_greenlit = True
 
-        return newvar, assigned_units, gain, is_greenlit
+        return newvar, assigned_units, gain, is_greenlit, ignore_after
 
     def get_varname_naming_convention(self, raw_varname) -> str:
         """Map standarized naming convention varname to raw varname, stored as *field* in db"""
