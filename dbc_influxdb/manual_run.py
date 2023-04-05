@@ -8,7 +8,7 @@ def upload_specific_file():
     Upload specific file to database
     """
 
-    # dir_base = r'F:\Dropbox\luhk_work\40 - DATA\FLUXNET-WW2020_RELEASE-2022-1'
+    dir_base = r'L:\Sync\luhk_work\40 - DATA\DATASETS\FLUXNET-WW2020_RELEASE-2022-1 Swiss sites'
 
     # CH-AWS
     # to_bucket = 'ch-aws_processing'
@@ -31,30 +31,33 @@ def upload_specific_file():
     # file_site = r'FLX_CH-Fru_FLUXNET2015_FULLSET_HH_2005-2020_beta-3.csv'
 
     # CH-LAE
-    # to_bucket = 'ch-lae_processing'
-    # dir_site = r'FLX_CH-Lae_FLUXNET2015_FULLSET_2004-2020_beta-3'
-    # file_site = r'FLX_CH-Lae_FLUXNET2015_FULLSET_HH_2004-2020_beta-3.csv'
+    to_bucket = 'ch-lae_processing'
+    dir_site = r'FLX_CH-Lae_FLUXNET2015_FULLSET_2004-2020_beta-3'
+    file_site = r'FLX_CH-Lae_FLUXNET2015_FULLSET_HH_2004-2020_beta-3.csv'
 
     # # CH-OE2
     # to_bucket = 'ch-oe2_processing'
     # dir_site = r'FLX_CH-Oe2_FLUXNET2015_FULLSET_2004-2020_beta-3'
     # file_site = r'FLX_CH-Oe2_FLUXNET2015_FULLSET_HH_2004-2020_beta-3.csv'
 
-    to_bucket = 'test'
-    dir_base = r'F:\Downloads'
-    dir_site = r'_temp'
-    file_site = r'CH-DAV_iDL_T1_35_1_TBL1_2022_10_25_0000.dat.csv'
+    # to_bucket = 'test'
+    # dir_base = r'F:\Downloads'
+    # dir_site = r'_temp'
+    # file_site = r'CH-DAV_iDL_T1_35_1_TBL1_2022_10_25_0000.dat.csv'
 
     # Prepare upload settings
     filepath = str(Path(dir_base) / Path(dir_site) / file_site)
 
-    # data_version = 'FLUXNET-WW2020_RELEASE-2022-1'  # Important tag
-    data_version = 'raw'  # Important tag
+    # Important tag
+    data_version = 'FLUXNET-WW2020_RELEASE-2022-1'
+    # data_version = 'raw'
 
-    dirconf = r'F:\Dropbox\luhk_work\20 - CODING\22 - POET\configs'  # Configurations
+    # Configurations
+    dirconf = r'L:\Sync\luhk_work\20 - CODING\22 - POET\configs'
 
-    # filetype = 'PROC-FLUXNET-FULLSET-HH-CSV-30MIN'
-    filetype = 'DAV10-RAW-TBL1-201802281101-TOA5-DAT-10S'
+    # Filetype
+    filetype = 'PROC-FLUXNET-FULLSET-HH-CSV-30MIN'
+    # filetype = 'DAV10-RAW-TBL1-201802281101-TOA5-DAT-10S'
 
     # Instantiate class
     dbc = dbcInflux(dirconf=dirconf)
@@ -66,13 +69,15 @@ def upload_specific_file():
                                               timezone_of_timestamp='UTC+01:00')
 
     # Upload file data to database
-    varscanner_df = dbc.upload_filetype(to_bucket=to_bucket,
-                                        file_df=df,
-                                        filetypeconf=filetypeconf,
-                                        fileinfo=fileinfo,
-                                        data_version=data_version,
-                                        parse_var_pos_indices=filetypeconf['data_vars_parse_pos_indices'],
-                                        timezone_of_timestamp='UTC+01:00')
+    varscanner_df, freq, freqfrom = dbc.upload_filetype(
+        to_bucket=to_bucket,
+        file_df=df[0],
+        filetypeconf=filetypeconf,
+        fileinfo=fileinfo,
+        data_version=data_version,
+        parse_var_pos_indices=filetypeconf['data_vars_parse_pos_indices'],
+        timezone_of_timestamp='UTC+01:00',
+        data_vars=filetypeconf['data_vars'])
 
     print(varscanner_df)
 
@@ -90,7 +95,8 @@ def download():
     DATA_VERSION = 'meteoscreening'
     OUTFILE = f"CH-LAE_2020-2021_TA_20221201.csv"
     DIRCONF = r'L:\Dropbox\luhk_work\20 - CODING\22 - POET\configs'  # Folder with configurations
-    MEASUREMENTS = ['TA']  # Measurement name, used to group similar variable together, e.g., 'TA' contains all air temperature variables
+    MEASUREMENTS = [
+        'TA']  # Measurement name, used to group similar variable together, e.g., 'TA' contains all air temperature variables
     # FIELDS = [TA1]  # Variable name; InfluxDB stores variable names as '_field'
     FIELDS = [TA1, TA2, TA3]  # Variable name; InfluxDB stores variable names as '_field'
     START = '2020-01-01 00:30:00'  # Download data starting with this date
@@ -118,5 +124,5 @@ def download():
 
 
 if __name__ == '__main__':
-    # upload_specific_file()
-    download()
+    upload_specific_file()
+    # download()

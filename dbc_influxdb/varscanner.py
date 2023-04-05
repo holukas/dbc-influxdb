@@ -267,7 +267,7 @@ class VarScanner:
             # columns). In such case, the file is converted so that each
             # different height is in its separate column. That means that
             # the rawvar names for each column are generated dynamically
-            # from info in the file and that therefore the rawvar can not
+            # from info in the file and that therefore the rawvar cannot
             # be given with the *exact* name in the config file.
 
             # Assigned units from config file and measurement
@@ -281,6 +281,12 @@ class VarScanner:
                     # Gain from config file if provided, else set to 1
                     gain = self.data_vars[dv]['gain'] \
                         if 'gain' in self.data_vars[dv] else 1
+
+                    # ignore_after date from config file, else set to None
+                    if 'ignore_after' in self.data_vars[dv]:
+                        ignore_after = self.data_vars[dv]['ignore_after']
+                    else:
+                        ignore_after = None
 
                     # Indicate that var was found in config file
                     is_greenlit = True

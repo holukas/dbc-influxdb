@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.8.1 | 5 Apr 2023
+
+- Fixed: option `ignore_after` was not implememented for special formats, e.g.
+  for `40_chambers_ghg` at site CH-DAV. This resulted in the data not being
+  uploaded to the database. This issue also affected `30_profile_ghg` data.
+
 ## v0.8.0 | 9 Mar 2023
 
 - Implemented an option `ignore_after` to ignore data after a specific datetime.
