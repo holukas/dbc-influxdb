@@ -23,9 +23,9 @@ class dbcInflux:
         self.dirconf = Path(dirconf)
 
         self.conf_filetypes, \
-        self.conf_unitmapper, \
-        self.conf_dirs, \
-        self.conf_db = self._read_configs()
+            self.conf_unitmapper, \
+            self.conf_dirs, \
+            self.conf_db = self._read_configs()
 
         self._test_connection_to_db()
 
@@ -54,7 +54,8 @@ class dbcInflux:
         """
 
         # Add timezone info
-        var_df.index = self.add_timezone_info(timestamp_index=var_df.index, timezone_of_timestamp=timezone_of_timestamp)
+        var_df.index = self._add_timezone_info(timestamp_index=var_df.index,
+                                               timezone_of_timestamp=timezone_of_timestamp)
 
         # Database clients
         print("Connecting to database ...")
@@ -108,25 +109,30 @@ class dbcInflux:
                         timezone_of_timestamp: str,
                         parse_var_pos_indices: bool = True,
                         logger=None) -> DataFrame:
-        """Upload data from file
+        """
+        Upload data from file
 
         Primary method to automatically upload data from files to
         the database with the 'dataflow' package.
 
-        :param file_df:
-        :param data_version:
-        :param fileinfo:
-        :param to_bucket:
-        :param filetypeconf:
-        :param parse_var_pos_indices:
-        :param logger:
-        :param timezone_of_timestamp: e.g. 'UTC+01:00', see docstring in `.add_timezone_info' for more details
-        :return:
+        Args:
+            file_df:
+            data_version:
+            data_vars:
+            fileinfo:
+            to_bucket:
+            filetypeconf:
+            timezone_of_timestamp: e.g. 'UTC+01:00', see docstring in `.add_timezone_info' for more details
+            parse_var_pos_indices:
+            logger:
+
+        Returns:
+
         """
 
         # Add timezone info
-        file_df.index = self.add_timezone_info(timestamp_index=file_df.index,
-                                               timezone_of_timestamp=timezone_of_timestamp)
+        file_df.index = self._add_timezone_info(timestamp_index=file_df.index,
+                                                timezone_of_timestamp=timezone_of_timestamp)
 
         varscanner = VarScanner(file_df=file_df,
                                 data_version=data_version,
@@ -141,27 +147,6 @@ class dbcInflux:
         varscanner.run()
         return varscanner.get_results()
 
-    def add_timezone_info(self, timestamp_index, timezone_of_timestamp: str):
-        """Add timezone info to timestamp index
-
-        No data are changed, only the timezone info is added to the timestamp.
-
-        :param: timezone_of_timestamp: If 'None', no timezone info is added. Otherwise
-            can be `str` that describes the timezone in relation to UTC in the format:
-            'UTC+01:00' (for CET), 'UTC+02:00' (for CEST), ...
-            InfluxDB uses this info to upload data (always) in UTC/GMT.
-
-        see: https://www.atmos.albany.edu/facstaff/ktyle/atm533/core/week5/04_Pandas_DateTime.html#note-that-the-timezone-is-missing-the-read-csv-method-does-not-provide-a-means-to-specify-the-timezone-we-can-take-care-of-that-though-with-the-tz-localize-method
-
-        """
-        return timestamp_index.tz_localize(timezone_of_timestamp)  # v0.3.1
-
-    # def query(self, func, *args, **kwargs):
-    #     client = get_client(self.conf_db)
-    #     query_api = get_query_api(client)
-    #     func(query_api=query_api, *args, **kwargs)
-    #     client.close()
-
     def download(self,
                  bucket: str,
                  measurements: list,
@@ -169,8 +154,10 @@ class dbcInflux:
                  start: str,
                  stop: str,
                  timezone_offset_to_utc_hours: int,  # v0.3.0
-                 data_version: str) -> tuple[DataFrame, dict, dict]:
-        """Get data from database between 'start' and 'stop' dates
+                 data_version: str,
+                 verify_freq: str = False) -> tuple[DataFrame, dict, dict]:
+        """
+        Get data from database between 'start' and 'stop' dates
 
         The exact 'stop' date is NOT included.
 
@@ -179,17 +166,22 @@ class dbcInflux:
         is e.g. '1' for CET, then the dates are also understood to be in the same
         timezone, e.g. CET.
 
-        :param bucket: name of bucket in database
-        :param measurements: list of measurements in database, e.g. ['TA', 'SW']
-        :param fields: list of fields (variable names)
-        :param start: start date, e.g. '2022-07-04 00:30:00'
-        :param stop: stop date, e.g. '2022-07-05 12:00:00'
-        :param timezone_offset_to_utc_hours: convert the UTC timestamp from the
-            database to this timezone offset, e.g. if '1' then data are downloaded
-            and returned with the timestamp 'UTC+01:00', i.e. UTC + 1 hour, which
-            corresponds to CET (winter time)
-        :param data_version: version ID of the data that should be downloaded,
-            e.g. 'meteoscreening'
+        Args:
+            bucket: name of bucket in database
+            measurements: list of measurements in database, e.g. ['TA', 'SW']
+            fields: list of fields (variable names)
+            start: start date, e.g. '2022-07-04 00:30:00'
+            stop: stop date, e.g. '2022-07-05 12:00:00'
+            timezone_offset_to_utc_hours: convert the UTC timestamp from the
+                database to this timezone offset, e.g. if '1' then data are downloaded
+                and returned with the timestamp 'UTC+01:00', i.e. UTC + 1 hour, which
+                corresponds to CET (winter time)
+            data_version: version ID of the data that should be downloaded,
+                e.g. 'meteoscreening'
+            verify_freq: checks if the downloaded data has the expected frequency, given
+                as str in the format of pandas frequency strings, e.g., '30T' for 30-minute
+                data.
+
         """
 
         print(f"Downloading from bucket {bucket}:\n"
@@ -329,77 +321,16 @@ class dbcInflux:
             print(f"    {key}   ({num_records} records)     "
                   f"first date: {first_date}    last date: {last_date}")
 
-        assigned_measurements = self.detect_measurement_for_field(bucket=bucket,
-                                                                  measurementslist=measurements,
-                                                                  varnameslist=list(data_detailed.keys()))
+        assigned_measurements = self._detect_measurement_for_field(bucket=bucket,
+                                                                   measurementslist=measurements,
+                                                                   varnameslist=list(data_detailed.keys()))
+
+        # TODO hier weiter check verify frequency
+        if verify_freq:
+            from varscanner import infer_freq
+            freq, freqfrom = infer_freq(df_index=data_simple.index)
 
         return data_simple, data_detailed, assigned_measurements
-
-    def readfile(self, filepath: str, filetype: str, nrows=None, logger=None, timezone_of_timestamp=None):
-        # Read data of current file
-        logtxt = f"[{self.script_id}] Reading file {filepath} ..."
-        logger.info(logtxt) if logger else print(logtxt)
-        filetypeconf = self.conf_filetypes[filetype]
-        df_list, fileinfo = FileTypeReader(filepath=filepath,
-                                           filetype=filetype,
-                                           filetypeconf=filetypeconf,
-                                           nrows=nrows).get_data()
-        return df_list, filetypeconf, fileinfo
-
-    def _read_configs(self):
-
-        # # Search in this file's folder
-        # _dir_main = Path(__file__).parent.resolve()
-
-        # Config locations
-        _dir_filegroups = self.dirconf / 'filegroups'
-        _file_unitmapper = self.dirconf / 'units.yaml'
-        _file_dirs = self.dirconf / 'dirs.yaml'
-        _file_dbconf = Path(f"{self.dirconf}_secret") / 'dbconf.yaml'
-
-        # Read configs
-        conf_filetypes = get_conf_filetypes(dir=_dir_filegroups)
-        conf_unitmapper = read_configfile(config_file=_file_unitmapper)
-        conf_dirs = read_configfile(config_file=_file_dirs)
-        conf_db = read_configfile(config_file=_file_dbconf)
-        print("Reading configuration files was successful.")
-        return conf_filetypes, conf_unitmapper, conf_dirs, conf_db
-
-    def _test_connection_to_db(self):
-        """Connect to database"""
-        client = get_client(self.conf_db)
-        client.ping()
-        client.close()
-        print("Connection to database works.")
-
-    def _convert_datestr_to_iso8601(self, datestr: str, timezone_offset_to_utc_hours: int) -> str:
-        """Convert date string to ISO 8601 format
-
-        Needed for InfluxDB query.
-
-        InfluxDB stores data in UTC (same as GMT). We want to be able to specify a start/stop
-        time range in relation to the timezone we want to have the data in. For example, if
-        we want to download data in CET, then we want to specify the range also in CET.
-
-        This method converts the requested timerange to the needed timezone.
-
-        :param datestr: in format '2022-05-27 00:00:00'
-        :param timezone_offset_to_utc_hours: relative to UTC, e.g. 1 for CET (winter time)
-        :return:
-            e.g. with 'timezone_offset_to_utc_hours=1' the datestr'2022-05-27 00:00:00'
-                is converted to '2022-05-27T00:00:00+01:00', which corresponds to CET
-                (Central European Time, winter time, without daylight savings)
-        """
-        _datetime = parser.parse(datestr)
-        _isostr = _datetime.isoformat()
-        # Needs to be in format '2022-05-27T00:00:00Z' for InfluxDB:
-        sign = '+' if timezone_offset_to_utc_hours >= 0 else '-'
-        timezone_offset_to_utc_hours = str(timezone_offset_to_utc_hours).zfill(2) \
-            if timezone_offset_to_utc_hours < 10 \
-            else timezone_offset_to_utc_hours
-        isostr_influx = f"{_isostr}{sign}{timezone_offset_to_utc_hours}:00"
-        # isostr_influx = f"{_isostr}Z"  # Needs to be in format '2022-05-27T00:00:00Z' for InfluxDB
-        return isostr_influx
 
     def show_configs_unitmapper(self) -> dict:
         return self.conf_unitmapper
@@ -412,26 +343,6 @@ class dbcInflux:
 
     def show_config_for_filetype(self, filetype: str) -> dict:
         return self.conf_filetypes[filetype]
-
-    def detect_measurement_for_field(self, bucket: str, measurementslist: list, varnameslist: list) -> dict:
-        """Detect measurement group of variable
-
-        Helper function because the query in FluxQL (InfluxDB query language) does not return
-        the measurement group of the field. Used e.g. in diive meteoscreening, where info
-        about the measurement group is important.
-
-        :param bucket: name of database bucket, e.g. "ch-dav_raw"
-        :param measurementslist: list of measurements, e.g. "['TA', 'SW', 'LW']"
-        :param varnameslist: list of variable names, e.g. "[TA_T1_35_1, SW_IN_T1_35_1]"
-        :return:
-        """
-        assigned_measurements = {}
-        for m in measurementslist:
-            fieldslist = self.show_fields_in_measurement(bucket=bucket, measurement=m)
-            for var in varnameslist:
-                if var in fieldslist:
-                    assigned_measurements[var] = m
-        return assigned_measurements
 
     def show_fields_in_measurement(self, bucket: str, measurement: str, days: int = 9999) -> list:
         """Show fields (variable names) in measurement"""
@@ -490,7 +401,97 @@ class dbcInflux:
         print(f"Found {len(bucketlist)} buckets in database.")
         return bucketlist
 
-    def _read_configfile(self, config_file) -> dict:
+    @staticmethod
+    def _add_timezone_info(timestamp_index, timezone_of_timestamp: str):
+        """Add timezone info to timestamp index
+
+        No data are changed, only the timezone info is added to the timestamp.
+
+        :param: timezone_of_timestamp: If 'None', no timezone info is added. Otherwise
+            can be `str` that describes the timezone in relation to UTC in the format:
+            'UTC+01:00' (for CET), 'UTC+02:00' (for CEST), ...
+            InfluxDB uses this info to upload data (always) in UTC/GMT.
+
+        see: https://www.atmos.albany.edu/facstaff/ktyle/atm533/core/week5/04_Pandas_DateTime.html#note-that-the-timezone-is-missing-the-read-csv-method-does-not-provide-a-means-to-specify-the-timezone-we-can-take-care-of-that-though-with-the-tz-localize-method
+
+        """
+        return timestamp_index.tz_localize(timezone_of_timestamp)  # v0.3.1
+
+    # def query(self, func, *args, **kwargs):
+    #     client = get_client(self.conf_db)
+    #     query_api = get_query_api(client)
+    #     func(query_api=query_api, *args, **kwargs)
+    #     client.close()
+
+    def readfile(self, filepath: str, filetype: str, nrows=None, logger=None, timezone_of_timestamp=None):
+        # Read data of current file
+        logtxt = f"[{self.script_id}] Reading file {filepath} ..."
+        logger.info(logtxt) if logger else print(logtxt)
+        filetypeconf = self.conf_filetypes[filetype]
+        df_list, fileinfo = FileTypeReader(filepath=filepath,
+                                           filetype=filetype,
+                                           filetypeconf=filetypeconf,
+                                           nrows=nrows).get_data()
+        return df_list, filetypeconf, fileinfo
+
+    def _read_configs(self):
+
+        # # Search in this file's folder
+        # _dir_main = Path(__file__).parent.resolve()
+
+        # Config locations
+        _dir_filegroups = self.dirconf / 'filegroups'
+        _file_unitmapper = self.dirconf / 'units.yaml'
+        _file_dirs = self.dirconf / 'dirs.yaml'
+        _file_dbconf = Path(f"{self.dirconf}_secret") / 'dbconf.yaml'
+
+        # Read configs
+        conf_filetypes = get_conf_filetypes(dir=_dir_filegroups)
+        conf_unitmapper = read_configfile(config_file=_file_unitmapper)
+        conf_dirs = read_configfile(config_file=_file_dirs)
+        conf_db = read_configfile(config_file=_file_dbconf)
+        print("Reading configuration files was successful.")
+        return conf_filetypes, conf_unitmapper, conf_dirs, conf_db
+
+    def _test_connection_to_db(self):
+        """Connect to database"""
+        client = get_client(self.conf_db)
+        client.ping()
+        client.close()
+        print("Connection to database works.")
+
+    @staticmethod
+    def _convert_datestr_to_iso8601(datestr: str, timezone_offset_to_utc_hours: int) -> str:
+        """Convert date string to ISO 8601 format
+
+        Needed for InfluxDB query.
+
+        InfluxDB stores data in UTC (same as GMT). We want to be able to specify a start/stop
+        time range in relation to the timezone we want to have the data in. For example, if
+        we want to download data in CET, then we want to specify the range also in CET.
+
+        This method converts the requested timerange to the needed timezone.
+
+        :param datestr: in format '2022-05-27 00:00:00'
+        :param timezone_offset_to_utc_hours: relative to UTC, e.g. 1 for CET (winter time)
+        :return:
+            e.g. with 'timezone_offset_to_utc_hours=1' the datestr'2022-05-27 00:00:00'
+                is converted to '2022-05-27T00:00:00+01:00', which corresponds to CET
+                (Central European Time, winter time, without daylight savings)
+        """
+        _datetime = parser.parse(datestr)
+        _isostr = _datetime.isoformat()
+        # Needs to be in format '2022-05-27T00:00:00Z' for InfluxDB:
+        sign = '+' if timezone_offset_to_utc_hours >= 0 else '-'
+        timezone_offset_to_utc_hours = str(timezone_offset_to_utc_hours).zfill(2) \
+            if timezone_offset_to_utc_hours < 10 \
+            else timezone_offset_to_utc_hours
+        isostr_influx = f"{_isostr}{sign}{timezone_offset_to_utc_hours}:00"
+        # isostr_influx = f"{_isostr}Z"  # Needs to be in format '2022-05-27T00:00:00Z' for InfluxDB
+        return isostr_influx
+
+    @staticmethod
+    def _read_configfile(config_file) -> dict:
         """
         Load configuration from YAML file
 
@@ -503,6 +504,26 @@ class dbcInflux:
             data = yaml.safe_load(f)
             # data = yaml.load(f, Loader=SafeLoader)
         return data
+
+    def _detect_measurement_for_field(self, bucket: str, measurementslist: list, varnameslist: list) -> dict:
+        """Detect measurement group of variable
+
+        Helper function because the query in FluxQL (InfluxDB query language) does not return
+        the measurement group of the field. Used e.g. in diive meteoscreening, where info
+        about the measurement group is important.
+
+        :param bucket: name of database bucket, e.g. "ch-dav_raw"
+        :param measurementslist: list of measurements, e.g. "['TA', 'SW', 'LW']"
+        :param varnameslist: list of variable names, e.g. "[TA_T1_35_1, SW_IN_T1_35_1]"
+        :return:
+        """
+        assigned_measurements = {}
+        for m in measurementslist:
+            fieldslist = self.show_fields_in_measurement(bucket=bucket, measurement=m)
+            for var in varnameslist:
+                if var in fieldslist:
+                    assigned_measurements[var] = m
+        return assigned_measurements
 
 # def show_settings(self):
 #     print("Currently selected:")

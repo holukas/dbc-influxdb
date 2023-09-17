@@ -1,5 +1,19 @@
 # Changelog
 
+## upcoming
+
+todo ignore if one ID is missing in datafiles of -ALTERNATING- special formats
+todo enable separate time resolutions
+
+- data_raw_freq: [ 30T, 10T ] #todo two time resolutions can be given for -ALTERNATING- formats
+- data_raw_freq: [ 30T, irregular ]
+
+## v0.9.0 | 17 Sep 2023
+
+- Updated packages to newest versions
+- The args `mangle_dupe_cols` and `date_parser` are deprecated in pandas `.read_csv()` and
+  have been removed. For parsing dates, `date_format` is now used instead.
+
 ## v0.8.1 | 5 Apr 2023
 
 - Fixed: option `ignore_after` was not implememented for special formats, e.g.

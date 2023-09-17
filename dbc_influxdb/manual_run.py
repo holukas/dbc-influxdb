@@ -88,19 +88,14 @@ def download():
     """
 
     # Settings
-    SITE = 'ch-lae'  # Site name
-    TA1 = 'TA_T1_47_1'
-    TA2 = 'TA_T1_35_1'
-    TA3 = 'TA_T1_17.5_1'
+    SITE = 'ch-dav'  # Site name
+    VAR1 = 'SW_IN_NABEL_T1_35_1'
     DATA_VERSION = 'meteoscreening'
-    OUTFILE = f"CH-LAE_2020-2021_TA_20221201.csv"
-    DIRCONF = r'L:\Dropbox\luhk_work\20 - CODING\22 - POET\configs'  # Folder with configurations
-    MEASUREMENTS = [
-        'TA']  # Measurement name, used to group similar variable together, e.g., 'TA' contains all air temperature variables
-    # FIELDS = [TA1]  # Variable name; InfluxDB stores variable names as '_field'
-    FIELDS = [TA1, TA2, TA3]  # Variable name; InfluxDB stores variable names as '_field'
-    START = '2020-01-01 00:30:00'  # Download data starting with this date
-    STOP = '2023-01-01 00:30:00'  # Download data before this date (the stop date itself is not included)
+    DIRCONF = r'F:\Sync\luhk_work\20 - CODING\22 - POET\configs'  # Folder with configurations
+    MEASUREMENTS = ['SW']  # Measurement name
+    FIELDS = [VAR1]  # Variable name; InfluxDB stores variable names as '_field'
+    START = '2021-01-01 00:00:01'  # Download data starting with this date
+    STOP = '2021-01-05 00:00:01'  # Download data before this date (the stop date itself is not included)
     TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # Timezone, e.g. "1" is translated to timezone "UTC+01:00" (CET, winter time)
 
     # Instantiate class
@@ -124,5 +119,5 @@ def download():
 
 
 if __name__ == '__main__':
-    upload_specific_file()
-    # download()
+    # upload_specific_file()
+    download()

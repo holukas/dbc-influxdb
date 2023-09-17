@@ -7,8 +7,9 @@ from pandas import DataFrame
 
 from dbc_influxdb.common import tags
 from dbc_influxdb.db import get_client
-
-
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
+1
 class VarScanner:
     script_id = "[dbc.varscanner]"
 
@@ -90,6 +91,9 @@ class VarScanner:
 
             counter += 1
 
+            if 'SWC' in dfvar[0]:
+                print("X")
+
             # Check if data are available, skip var if not
             if self.file_df[dfvar].dropna().empty:
                 self.vars_empty_not_uploaded.append(dfvar)
@@ -161,7 +165,7 @@ class VarScanner:
         # Ignore data after the datetime given in `ignore_after`
         if newvar['ignore_after']:
             firstdate = var_df.index[0]
-            lastalloweddate = pd.to_datetime(newvar['ignore_after'],format= '%Y-%m-%d %H:%M:%S')
+            lastalloweddate = pd.to_datetime(newvar['ignore_after'], format='%Y-%m-%d %H:%M:%S')
             lastalloweddate = pd.Timestamp(newvar['ignore_after'], tz='UTC+01:00')
             var_df = var_df.loc[firstdate:lastalloweddate].copy()
 
@@ -336,7 +340,6 @@ class VarScanner:
 
         return newvar, is_greenlit
 
-
     def _match_exact_name(self, newvar, filetypeconf, rawvar):
         """Match variable name from data with variable name from settings ('data_vars')"""
         # If rawvar is given as variable in data_vars
@@ -422,7 +425,8 @@ class VarScanner:
     #                   'config_filetype': filetype}
     #     return pd.Series(entry_dict)  # Convert to Series
 
-    def _infer_freq(self, filetypeconf, df_index: pd.Index):
+    @staticmethod
+    def _infer_freq(filetypeconf, df_index: pd.Index):
         """
         Try to infer time resolution from data
         """
@@ -475,7 +479,8 @@ class VarScanner:
     #                     data_last_date=self.data_df.index[-1] if num_datarows > 0 else None)
     #     return varsinfo
 
-    def _init_varscanner_df(self) -> pd.DataFrame:
+    @staticmethod
+    def _init_varscanner_df() -> pd.DataFrame:
         """Collects info about each var"""
         return pd.DataFrame(columns=['raw_varname', 'raw_units',
                                      'measurement', 'field', 'units',

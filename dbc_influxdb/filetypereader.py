@@ -13,7 +13,7 @@ pd.set_option('display.max_columns', 15)
 pd.set_option('display.max_rows', 30)
 
 
-class FileTypeReader():
+class FileTypeReader:
     """Read file and its variables according to a specified filetype"""
 
     def __init__(self,
@@ -54,7 +54,8 @@ class FileTypeReader():
         # None, sometimes 0. To be specific that index_col is not used, the value
         # -9999 is set in the yaml file.
         self.index_col = None if filetypeconf['data_index_col'] == -9999 else filetypeconf['data_index_col']
-        self.date_parser = self._get_date_parser(parser=filetypeconf['data_date_parser'])
+        self.date_format = filetypeconf['data_date_parser']
+        # self.date_parser = self._get_date_parser(parser=filetypeconf['data_date_parser'])  # deprecated in pandas
         self.na_values = filetypeconf['data_na_values']
         self.delimiter = filetypeconf['data_delimiter']
         self.mangle_dupe_cols = filetypeconf['data_mangle_dupe_cols']
@@ -239,6 +240,7 @@ class FileTypeReader():
         conversions also need to be returned as lists after this
          step for the sake of consistency.
         """
+        df = None
         if self.special_format == '-ICOSSEQ-':
             df = self._special_format_icosseq()  # Returns single dataframe
         elif self.special_format == '-ALTERNATING-':
@@ -399,12 +401,14 @@ class FileTypeReader():
             except:
                 self.df_list[ix] = self.df_list[ix].apply(pd.to_numeric, errors='coerce')  # Does not crash
 
-    def _get_date_parser(self, parser):
-        return lambda c: pd.to_datetime(c, format=parser, errors='coerce') if parser else False
-        # Alternative: date_parser = lambda x: dt.datetime.strptime(x, self.fileformatconf['date_format'])
+    # def _get_date_parser(self, parser):
+    # date_parser arg is now deprecated in pandas
+    #     return lambda c: pd.to_datetime(c, format=parser, errors='coerce') if parser else False
+    #     # Alternative: date_parser = lambda x: dt.datetime.strptime(x, self.fileformatconf['date_format'])
 
     def _add_units_row(self):
         """Units not given in files with single-row header"""
+
         for ix, df in enumerate(self.df_list):
             if not isinstance(self.df_list[ix].columns, pd.MultiIndex):
                 newcols = []
@@ -421,10 +425,11 @@ class FileTypeReader():
                     na_values=self.na_values,
                     encoding=self.data_encoding,
                     delimiter=self.delimiter,
-                    mangle_dupe_cols=self.mangle_dupe_cols,
+                    # mangle_dupe_cols=self.mangle_dupe_cols,  # deprecated in pandas
                     keep_date_col=self.keep_date_col,
                     parse_dates=self.parse_dates,
-                    date_parser=self.date_parser,
+                    date_format=self.date_format,
+                    # date_parser=self.date_format,  # deprecated in pandas
                     index_col=self.index_col,
                     # engine='c',
                     engine='python',

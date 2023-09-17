@@ -1,19 +1,22 @@
 [tool.poetry]
 name = "dbc-influxdb"
-version = "0.8.1"
-description = "Database communication: show, download and upload data. Works with InfluxDB 2.x."
-authors = ["holukas <lukas.hoertnagl@usys.ethz.ch>"]
+version = "0.9.0"
+description = ""
+authors = ["Lukas Hörtnagl <31772692+holukas@users.noreply.github.com>"]
+readme = "README.md"
+packages = [{include = "dbc_influxdb"}]
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.11"
-PyYAML = "^6.0"
-influxdb-client = {extras = ["extra"], version = "^1.29.1"}
-pandas = "^1.4.2"
+pyyaml = "^6.0.1"
+pandas = "^2.1.0"
+influxdb-client = "^1.37.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
 twine = "^4.0.1"
 
+
 [build-system]
-requires = ["poetry-core>=1.0.0"]
+requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
