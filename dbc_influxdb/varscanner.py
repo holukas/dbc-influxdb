@@ -1,3 +1,4 @@
+import warnings
 from pathlib import Path
 
 import pandas as pd
@@ -7,9 +8,10 @@ from pandas import DataFrame
 
 from dbc_influxdb.common import tags
 from dbc_influxdb.db import get_client
-import warnings
+
 warnings.simplefilter(action='ignore', category=FutureWarning)
-1
+
+
 class VarScanner:
     script_id = "[dbc.varscanner]"
 
@@ -18,6 +20,7 @@ class VarScanner:
             file_df: DataFrame,
             data_version: str,
             data_vars: dict,
+            data_raw_freq: str,
             fileinfo: dict,
             filetypeconf: dict,
             conf_unitmapper: dict,
@@ -29,6 +32,7 @@ class VarScanner:
         self.file_df = file_df
         self.data_version = data_version
         self.data_vars = data_vars
+        self.data_raw_freq = data_raw_freq
         self.fileinfo = fileinfo
         self.filetypeconf = filetypeconf
         self.conf_unitmapper = conf_unitmapper
@@ -38,7 +42,7 @@ class VarScanner:
         self.logger = logger if logger else None
 
         # Infer time resolution from data
-        self.freq, self.freqfrom = self._infer_freq(df_index=self.file_df.index, filetypeconf=self.filetypeconf)
+        self.freq, self.freqfrom = self._infer_freq()
 
         self.varscanner_df = self._init_varscanner_df()
         self.vars_empty_not_uploaded = []
@@ -90,9 +94,6 @@ class VarScanner:
         for dfvar in self.file_df.columns.to_list():
 
             counter += 1
-
-            if 'SWC' in dfvar[0]:
-                print("X")
 
             # Check if data are available, skip var if not
             if self.file_df[dfvar].dropna().empty:
@@ -160,6 +161,8 @@ class VarScanner:
         var_df = pd.DataFrame(index=df.index, data=df[varcol])
 
         # Apply gain (gain = 1 if no gain is specified in filetype settings)
+        if newvar['gain'] != 1:
+            print(newvar['gain'])
         var_df[varcol] = var_df[varcol].multiply(newvar['gain'])
 
         # Ignore data after the datetime given in `ignore_after`
@@ -223,7 +226,7 @@ class VarScanner:
             data_version=self.data_version,
             special_format=self.fileinfo['special_format'],
             db_bucket=self.to_bucket,
-            data_raw_freq=self.filetypeconf['data_raw_freq'],
+            data_raw_freq=self.data_raw_freq,
             freq=self.freq,
             freqfrom=self.freqfrom,
             raw_units=rawvar[1],
@@ -415,31 +418,26 @@ class VarScanner:
                 return False
         return True
 
-    # def _generate_var_entry(self, raw_varname, raw_units, filetypeconf, filetype):
-    #     """Generate entry with info about this var"""
-    #     entry_dict = {'raw_varname': raw_varname,
-    #                   'raw_units': raw_units,
-    #                   'varname': self._get_varname_naming_convention(raw_varname=raw_varname,
-    #                                                                  filetypeconf=filetypeconf),
-    #                   'units': self._get_units_naming_convention(raw_units=raw_units),
-    #                   'config_filetype': filetype}
-    #     return pd.Series(entry_dict)  # Convert to Series
-
-    @staticmethod
-    def _infer_freq(filetypeconf, df_index: pd.Index):
+    def _infer_freq(self):
         """
         Try to infer time resolution from data
         """
-        num_datarows = df_index.__len__()
+        num_datarows = self.file_df.index.__len__()
 
         _inferred_freq = None
         _inferred_freq_start = None
         _inferred_freq_end = None
         freqfrom = None
 
+        # # Detect raw data time resolution for -ALTERNATING- special formats
+        # # For these files, multiple time resolutions can be stored in the same file.
+        # data_raw_freq = self._get_alternating_freq()
+        # if not data_raw_freq:
+        #     data_raw_freq = self.filetypeconf['data_raw_freq']
+
         # Try to infer freq from complete data, needs at least 3 values
         if num_datarows >= 3:
-            _inferred_freq = pd.infer_freq(df_index)
+            _inferred_freq = pd.infer_freq(self.file_df.index)
             freqfrom = 'data (full)' if _inferred_freq else '-'  # Freq detected from full data, best case
 
         # If this did not work, try more
@@ -451,8 +449,8 @@ class VarScanner:
         if not _inferred_freq and num_datarows > 0:
             for ndr in range(50, 5, -1):  # ndr = number of data rows
                 if num_datarows >= ndr * 2:  # Same amount of ndr needed for start and end of file
-                    _inferred_freq_start = pd.infer_freq(df_index[0:ndr])
-                    _inferred_freq_end = pd.infer_freq(df_index[-ndr:])
+                    _inferred_freq_start = pd.infer_freq(self.file_df.index[0:ndr])
+                    _inferred_freq_end = pd.infer_freq(self.file_df.index[-ndr:])
                     _inferred_freq = _inferred_freq_start if _inferred_freq_start == _inferred_freq_end else None
                     if _inferred_freq:
                         freqfrom = f'data {ndr}+{ndr}' if _inferred_freq else '-'
@@ -462,22 +460,53 @@ class VarScanner:
 
         # Assign freq
         if _inferred_freq:
-            freq = _inferred_freq if _inferred_freq == filetypeconf['data_raw_freq'] \
-                else f"-mismatch-{_inferred_freq}-vs-{filetypeconf['data_raw_freq']}-"
+            freq = _inferred_freq if _inferred_freq == self.data_raw_freq \
+                else f"-mismatch-{_inferred_freq}-vs-{self.data_raw_freq}-"
         else:
             # If that did not work, use given freq from settings
-            freq = filetypeconf['data_raw_freq']
+            freq = self.data_raw_freq
             freqfrom = 'config'
         return freq, freqfrom
 
-    # def _stats(self) -> dict:
-    #     """General info about variables in file"""
-    #     num_datarows = self.data_df.index.__len__()
-    #     varsinfo = dict(num_vars=len(self.data_df.columns),
-    #                     num_datarows=num_datarows,
-    #                     data_first_date=self.data_df.index[0] if num_datarows > 0 else None,
-    #                     data_last_date=self.data_df.index[-1] if num_datarows > 0 else None)
-    #     return varsinfo
+    # def _get_alternating_freq(self) -> str:
+    #     """ Check whether this is an -ALTERNATING- filetype and assign
+    #     the correct data raw freq from the config files
+    #
+    #     -ALTERNATING- files store data from different sources in one single
+    #     file. An integer ID at the start of each record indicates where the data
+    #     records of the respective data row originated. Both data sources
+    #     can be stored in different time resolutions, resulting in data files
+    #     that have e.g. 30MIN records for records of one ID, and irregular frequency
+    #     for records from the other ID, all mixed in one file.
+    #
+    #     This method returns the freq for the respective ID from the config file.
+    #
+    #     For -ALTERNATING- files, the setting 'data_keep_good_rows' is
+    #     stored as a list in the config file, e.g., data_keep_good_rows: [ 0, 104, 204 ].
+    #     Likewise, 'data_raw_freq' is stored as list, e.g. data_raw_freq: [ 30T, irregular ]
+    #     """
+    #     found_data_raw_freq = None
+    #     data_keep_good_rows = self.filetypeconf['data_keep_good_rows']
+    #     data_raw_freq = self.filetypeconf['data_raw_freq']
+    #     if (
+    #             (isinstance(data_keep_good_rows, list))
+    #             and (isinstance(data_raw_freq, list))
+    #     ):
+    #         if (
+    #                 (len(data_keep_good_rows) == 3)
+    #                 and (len(data_raw_freq) == 2)
+    #         ):
+    #             # In this case there must be a column named ID which contains
+    #             # info about the stored data
+    #             _df = self.file_df.copy()
+    #             _df.columns = _df.columns.droplevel(1)
+    #             if 'ID' in _df.columns:
+    #                 uniq_ids = _df['ID'].unique()
+    #                 if len(uniq_ids) == 1:
+    #                     this_id = uniq_ids[0]
+    #                     data_raw_freq_ix = data_keep_good_rows.index(this_id) - 1
+    #                     found_data_raw_freq = data_raw_freq[data_raw_freq_ix]
+    #     return found_data_raw_freq
 
     @staticmethod
     def _init_varscanner_df() -> pd.DataFrame:

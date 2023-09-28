@@ -37,6 +37,7 @@ class FileTypeReader:
 
         self.data_df = pd.DataFrame()
         self.df_list = pd.DataFrame()
+        self.missed_ids = None
 
         # Settings for .read_csv
 
@@ -110,7 +111,7 @@ class FileTypeReader:
         self.run()
 
     def get_data(self):
-        return self.df_list, self.file_info
+        return self.df_list, self.file_info, self.missed_ids
 
     def run(self):
         self.data_df = self._readfile()
@@ -136,7 +137,9 @@ class FileTypeReader:
         # in a list. Other special formats are therefore also returned
         # in a list, to be consistent.
         if self.special_format:
-            self.df_list = self._special_data_formats()
+            self.df_list, self.missed_ids = self._special_data_formats()
+        else:
+            self.missed_ids = 'none, is not special format'
 
         # ** After this step, self.df_list instead of self.data_df is used for further processing **
 
@@ -245,8 +248,21 @@ class FileTypeReader:
             df = self._special_format_icosseq()  # Returns single dataframe
         elif self.special_format == '-ALTERNATING-':
             df = self._special_format_alternating()  # Returns two dataframes in list
+            missed_ids = self._check_special_format_alternating_missed_ids()
         df_list = [df] if not isinstance(df, list) else df
-        return df_list
+        return df_list, missed_ids
+
+    def _check_special_format_alternating_missed_ids(self):
+        """Check if there are IDs that were not defined in the filetype config
+
+        In case of special format -ALTERNATING-, there can be multiple integer IDs
+        at the start of each data record, this method checks if there are any new and
+        undefined IDs
+        """
+        available_ids = self.data_df['ID'].dropna().unique().tolist()
+        missed_ids = [x for x in self.goodrows_ids if x not in available_ids]
+        missed_ids = 'all IDs defined' if len(missed_ids) == 0 else missed_ids
+        return missed_ids
 
     def _special_format_alternating(self) -> list:
         """Special format -ALTERNATING-
@@ -277,14 +293,19 @@ class FileTypeReader:
         data_df = data_df.iloc[:, 0:n_raw_varnames].copy()  # Keep number of cols for this ID
         data_df.columns = raw_varnames  # Assign correct varnames
 
+        # Not all -ALTERNATING- files have a second ID
+        # In case there is only one ID, return dataframe as list
+        if len(self.goodrows_ids) == 1:
+            return [data_df]
+
         # Get data for second ID
+        # Script arrives here only if there is more than one ID defined in goodrows_ids
         filter_data2_rows = self.data_df.iloc[:, self.goodrows_col] == self.goodrows_ids[1]
         data2_df = self.data_df[filter_data2_rows].copy()
         raw_varnames = list(self.filetypeconf['data_vars2'].keys())
         n_raw_varnames = len(raw_varnames)
         data2_df = data2_df.iloc[:, 0:n_raw_varnames].copy()
         data2_df.columns = raw_varnames
-
         return [data_df, data2_df]
 
     def _special_format_icosseq(self) -> pd.DataFrame:

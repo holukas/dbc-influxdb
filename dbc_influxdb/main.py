@@ -103,6 +103,7 @@ class dbcInflux:
                         file_df: DataFrame,
                         data_version: str,
                         data_vars: dict,
+                        data_raw_freq: str,
                         fileinfo: dict,
                         to_bucket: str,
                         filetypeconf: dict,
@@ -131,12 +132,14 @@ class dbcInflux:
         """
 
         # Add timezone info
-        file_df.index = self._add_timezone_info(timestamp_index=file_df.index,
-                                                timezone_of_timestamp=timezone_of_timestamp)
+        if not file_df.index.tzinfo:
+            file_df.index = self._add_timezone_info(timestamp_index=file_df.index,
+                                                    timezone_of_timestamp=timezone_of_timestamp)
 
         varscanner = VarScanner(file_df=file_df,
                                 data_version=data_version,
                                 data_vars=data_vars,
+                                data_raw_freq=data_raw_freq,
                                 fileinfo=fileinfo,
                                 filetypeconf=filetypeconf,
                                 conf_unitmapper=self.conf_unitmapper,
@@ -417,22 +420,16 @@ class dbcInflux:
         """
         return timestamp_index.tz_localize(timezone_of_timestamp)  # v0.3.1
 
-    # def query(self, func, *args, **kwargs):
-    #     client = get_client(self.conf_db)
-    #     query_api = get_query_api(client)
-    #     func(query_api=query_api, *args, **kwargs)
-    #     client.close()
-
     def readfile(self, filepath: str, filetype: str, nrows=None, logger=None, timezone_of_timestamp=None):
         # Read data of current file
         logtxt = f"[{self.script_id}] Reading file {filepath} ..."
         logger.info(logtxt) if logger else print(logtxt)
         filetypeconf = self.conf_filetypes[filetype]
-        df_list, fileinfo = FileTypeReader(filepath=filepath,
+        df_list, fileinfo, missed_ids = FileTypeReader(filepath=filepath,
                                            filetype=filetype,
                                            filetypeconf=filetypeconf,
                                            nrows=nrows).get_data()
-        return df_list, filetypeconf, fileinfo
+        return df_list, filetypeconf, fileinfo, missed_ids
 
     def _read_configs(self):
 

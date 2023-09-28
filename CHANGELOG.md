@@ -1,12 +1,18 @@
 # Changelog
 
-## upcoming
+## v0.10.0 | 28 Sep 2023
 
-todo ignore if one ID is missing in datafiles of -ALTERNATING- special formats
-todo enable separate time resolutions
-
-- data_raw_freq: [ 30T, 10T ] #todo two time resolutions can be given for -ALTERNATING- formats
-- data_raw_freq: [ 30T, irregular ]
+- For `-ALTERNATING-` filetypes (special formats), it is now possible to define two different
+  time resolutions in the configs. Typically, these files have two IDs at the start of each line that
+  indicates where the respective data records originated from, i.e., these files contain
+  data from two different data sources in the same file. These data can have different time
+  resolutions, e.g., one is 30MIN and the other is irregular. This is defined in the config
+  file as `data_raw_freq: [ 30T, irregular ]`. It is also possible that these files have only
+  one ID and one time resolution, in which case the freq can be defined with a simple string as
+  for the other filetypes: `data_raw_freq: 30T`.
+- `VarScanner` now checks for missed IDs in `-ALTERNATING-` files, i.e., if an ID is found in the
+  data files that was not specified in the `configs`, then they are stored to a CSV output file.
+- Other refactorings
 
 ## v0.9.0 | 17 Sep 2023
 
