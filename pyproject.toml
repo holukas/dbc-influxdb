@@ -2,9 +2,9 @@
 name = "dbc-influxdb"
 version = "0.10.0"
 description = ""
-authors = ["Lukas Hörtnagl <31772692+holukas@users.noreply.github.com>"]
+authors = ["Lukas Hörtnagl <holukas@ethz.ch>"]
 readme = "README.md"
-packages = [{include = "dbc_influxdb"}]
+packages = [{ include = "dbc_influxdb" }]
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.11"
