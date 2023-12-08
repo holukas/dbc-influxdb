@@ -59,7 +59,6 @@ class FileTypeReader:
         # self.date_parser = self._get_date_parser(parser=filetypeconf['data_date_parser'])  # deprecated in pandas
         self.na_values = filetypeconf['data_na_values']
         self.delimiter = filetypeconf['data_delimiter']
-        self.mangle_dupe_cols = filetypeconf['data_mangle_dupe_cols']
         self.keep_date_col = filetypeconf['data_keep_date_col']
 
         # Format parse_dates arg for .read_csv()

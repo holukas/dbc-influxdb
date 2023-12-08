@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.10.1 | 8 Dec 2023
+ 
+- Removed left-over `self.mangle_dupe_cols = filetypeconf['data_mangle_dupe_cols']`
+
 ## v0.10.0 | 28 Sep 2023
 
 - For `-ALTERNATING-` filetypes (special formats), it is now possible to define two different
