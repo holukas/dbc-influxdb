@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "dbc-influxdb"
-version = "0.10.1"
+version = "0.10.2"
 description = ""
 authors = ["Lukas Hörtnagl <holukas@ethz.ch>"]
 readme = "README.md"
