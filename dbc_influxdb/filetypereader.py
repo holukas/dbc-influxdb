@@ -232,7 +232,7 @@ class FileTypeReader:
             filter_badrows = self.df_list[ix].iloc[:, self.badrows_col] != badrows_id
             self.df_list[ix] = self.df_list[ix][filter_badrows].copy()
 
-    def _special_data_formats(self) -> list:
+    def _special_data_formats(self):
         """
         Convert data with special format to conventional format
 
@@ -243,6 +243,7 @@ class FileTypeReader:
          step for the sake of consistency.
         """
         df = None
+        missed_ids = 'not relevant'
         if self.special_format == '-ICOSSEQ-':
             df = self._special_format_icosseq()  # Returns single dataframe
         elif self.special_format == '-ALTERNATING-':

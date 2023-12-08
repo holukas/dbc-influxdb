@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.10.2 | 8 Dec 2023
+ 
+- Fixed bug where `missed_ids` was referenced before assignment for filetypes that are not `-ALTERNATING-`.
+
 ## v0.10.1 | 8 Dec 2023
  
 - Removed left-over `self.mangle_dupe_cols = filetypeconf['data_mangle_dupe_cols']`
