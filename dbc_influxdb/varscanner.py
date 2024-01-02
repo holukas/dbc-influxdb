@@ -1,9 +1,7 @@
 import warnings
-from pathlib import Path
 
 import pandas as pd
 from influxdb_client import WriteOptions
-from numpy import arange
 from pandas import DataFrame
 
 from dbc_influxdb.common import tags
@@ -18,35 +16,29 @@ class VarScanner:
     def __init__(
             self,
             file_df: DataFrame,
-            data_version: str,
             data_vars: dict,
             data_raw_freq: str,
-            fileinfo: dict,
+            freq: str,
+            config_filetype: str,
             filetypeconf: dict,
             conf_unitmapper: dict,
             to_bucket: str,
             conf_db: dict,
-            parse_var_pos_indices: bool = True,
             logger=None
     ):
         self.file_df = file_df
-        self.data_version = data_version
         self.data_vars = data_vars
         self.data_raw_freq = data_raw_freq
-        self.fileinfo = fileinfo
-        self.filetypeconf = filetypeconf
+        self.freq = freq
+        self.config_filetype = config_filetype  # Filetype string, name of filetype
+        self.filetypeconf = filetypeconf  # Configuration dict for this filetype
         self.conf_unitmapper = conf_unitmapper
         self.to_bucket = to_bucket
-        self.parse_var_pos_indices = parse_var_pos_indices
         self.conf_db = conf_db
-        self.logger = logger if logger else None
-
-        # Infer time resolution from data
-        self.freq, self.freqfrom = self._infer_freq()
+        self.log = logger if logger else None
 
         self.varscanner_df = self._init_varscanner_df()
         self.vars_empty_not_uploaded = []
-        self.vars_not_greenlit_not_uploaded = []
 
     def run(self):
         # Database clients
@@ -69,8 +61,10 @@ class VarScanner:
             # Loop through vars
             self._loopvars(write_api=write_api)
 
-        self.varscanner_df.sort_values(by='raw_varname', axis=0, inplace=True)
-        self.varscanner_df.index = arange(1, len(self.varscanner_df) + 1)  # Reset index, starting at 1
+
+
+        # self.varscanner_df.sort_values(by='raw_varname', axis=0, inplace=True)
+        # self.varscanner_df.index = arange(1, len(self.varscanner_df) + 1)  # Reset index, starting at 1
         self._end_log()
 
     def _end_log(self):
@@ -82,7 +76,7 @@ class VarScanner:
         # print(f"     Found {self.varscanner_df.__len__()} unique variables across all files.")
 
     def get_results(self):
-        return self.varscanner_df, self.freq, self.freqfrom
+        return self.varscanner_df
 
     def _loopvars(self, write_api):
         """Loop over vars in file"""
@@ -109,37 +103,31 @@ class VarScanner:
 
             # Check greenlit
             if not is_greenlit:
-                self.vars_not_greenlit_not_uploaded.append(dfvar)
-                self._log_not_greenlit(newvar=newvar, fileinfo=self.fileinfo)
+                newvar['greenlit'] = '-not-greenlit-'  # Stored but not used as tag
 
             # Ingest var into database
             elif is_greenlit:
-                self._ingest(df=self.file_df, newvar=newvar, sourcepath=self.fileinfo['filepath'],
+                newvar['greenlit'] = 'greenlit'  # Stored but not used as tag
+                self._ingest(df=self.file_df, newvar=newvar,
                              counter=counter, numvars=numvars, write_api=write_api)
 
-            # Add var to found vars in overview of found variables
+            # todo Add var to found vars in overview of found variables
             self.varscanner_df = pd.concat([self.varscanner_df, pd.DataFrame.from_dict([newvar])],
                                            axis=0, ignore_index=True)
 
-        print("DONE: Finished all variable uploads.")
+        if self.log:
+            self.log.info(f"{self.script_id}")
+            self.log.info(f"{self.script_id} *** FINISHED DATA UPLOAD FOR FILETYPE {newvar['config_filetype']}.")
+            self.log.info(f"{self.script_id} *** database bucket: {newvar['db_bucket']}.")
+            self.log.info(f"{self.script_id} *** first date: {newvar['first_date']}")
+            self.log.info(f"{self.script_id} *** last date: {newvar['last_date']}")
+            # self.logger.info(logtxt) if self.logger else print(logtxt)
 
     def _log_no_data(self, var):
         logtxt = f"### (!)VARIABLE WARNING: NO DATA ###: Variable {var} is empty and will be skipped."
-        self.logger.info(logtxt) if self.logger else print(logtxt)
+        self.log.info(logtxt) if self.log else print(logtxt)
 
-    def _log_not_greenlit(self, newvar, fileinfo):
-        pass
-        # print(f"### (!)VARIABLE WARNING: NOT GREENLIT ###:")
-        # print(f"### Variable {newvar['raw_varname']} is not defined in "
-        #       f"filetype {fileinfo['filetype']}")
-
-        # if newvar['special_format']:
-        #     print(f"### Note that filetype {fileinfo['filetype']} is a special format "
-        #           f"and the variable needs to be given as it appears in the original file.")
-
-        # print(f"### If this is expected you can ignore this warning.")
-
-    def _ingest(self, df: pd.DataFrame, newvar, sourcepath: str, counter: int, numvars: int,
+    def _ingest(self, df: pd.DataFrame, newvar, counter: int, numvars: int,
                 write_api):
         """Collect variable data and tags and upload to database
 
@@ -156,13 +144,13 @@ class VarScanner:
         #     original units ('raw_units') in df.
         #   - Special formats have *renamed* varnames ('field') and
         #     original units ('raw_units') in df.
-        varcol = 'raw_varname' if not newvar['special_format'] == '-ICOSSEQ-' else 'field'
+        varcol = 'raw_varname' if not self.filetypeconf['data_special_format'] == '-ICOSSEQ-' else 'field'
         varcol = (newvar[varcol], newvar['raw_units'])  # Column name to access var in df
         var_df = pd.DataFrame(index=df.index, data=df[varcol])
 
         # Apply gain (gain = 1 if no gain is specified in filetype settings)
-        if newvar['gain'] != 1:
-            print(newvar['gain'])
+        # if newvar['gain'] != 1:
+        #     print(newvar['gain'])
         var_df[varcol] = var_df[varcol].multiply(newvar['gain'])
 
         # Ignore data after the datetime given in `ignore_after`
@@ -196,20 +184,14 @@ class VarScanner:
         var_df['config_filetype'] = newvar['config_filetype']
         var_df['data_version'] = newvar['data_version']
         var_df['gain'] = newvar['gain']
-        var_df['freqfrom'] = newvar['freqfrom']  # no longer a tag, will be removed below
-        var_df['srcfile'] = newvar['srcfile']  # no longer a tag since v0.2.0, will be removed below
-
-        # Remove tags that are not uploaded to db, but maybe needed later at some point
-        var_df.drop(columns=['freqfrom', 'srcfile'], inplace=True)
 
         # Write to db
         # Output also the source file to log
         logtxt = f"{self.script_id} " \
                  f"--> UPLOAD TO DATABASE BUCKET {newvar['db_bucket']}:  " \
                  f"{newvar['raw_varname']} as {newvar['field']}  " \
-                 f"source file: {sourcepath}  " \
                  f"Var #{counter} of {numvars}"
-        self.logger.info(logtxt) if self.logger else print(logtxt)
+        self.log.info(logtxt) if self.log else print(logtxt)
 
         write_api.write(newvar['db_bucket'],
                         record=var_df,
@@ -220,15 +202,12 @@ class VarScanner:
     def _init_varentry(self, rawvar) -> dict:
         """Collect variable info"""
         newvar = dict(
-            config_filetype=self.fileinfo['filetype'],
-            srcfile=Path(self.fileinfo['filepath']).name,  # Only filename with extension
+            config_filetype=self.config_filetype,
             filegroup=self.filetypeconf['filegroup'],
-            data_version=self.data_version,
-            special_format=self.fileinfo['special_format'],
+            data_version=self.filetypeconf['data_version'],
             db_bucket=self.to_bucket,
             data_raw_freq=self.data_raw_freq,
             freq=self.freq,
-            freqfrom=self.freqfrom,
             raw_units=rawvar[1],
             raw_varname='',
             measurement='',  # Not a tag, stored as _measurement in db
@@ -266,7 +245,7 @@ class VarScanner:
             newvar, assigned_units, gain, is_greenlit, ignore_after = \
                 self._match_exact_name(newvar=newvar, filetypeconf=self.filetypeconf, rawvar=rawvar)
 
-        elif self.fileinfo['special_format'] == '-ICOSSEQ-':
+        elif self.filetypeconf['data_special_format'] == '-ICOSSEQ-':
             # If rawvar is *not* given with the exact name in data_vars
             #
             # This is the case with e.g. ICOSSEQ files that store measurements
@@ -329,7 +308,7 @@ class VarScanner:
         newvar['hpos'] = '-not-given-'
         newvar['vpos'] = '-not-given-'
         newvar['repl'] = '-not-given-'
-        if self.parse_var_pos_indices:
+        if self.filetypeconf['data_vars_parse_pos_indices']:
             try:
                 newvar['hpos'] = newvar['field'].split('_')[-3]
                 newvar['vpos'] = newvar['field'].split('_')[-2]
@@ -417,96 +396,6 @@ class VarScanner:
             if ai != bi:
                 return False
         return True
-
-    def _infer_freq(self):
-        """
-        Try to infer time resolution from data
-        """
-        num_datarows = self.file_df.index.__len__()
-
-        _inferred_freq = None
-        _inferred_freq_start = None
-        _inferred_freq_end = None
-        freqfrom = None
-
-        # # Detect raw data time resolution for -ALTERNATING- special formats
-        # # For these files, multiple time resolutions can be stored in the same file.
-        # data_raw_freq = self._get_alternating_freq()
-        # if not data_raw_freq:
-        #     data_raw_freq = self.filetypeconf['data_raw_freq']
-
-        # Try to infer freq from complete data, needs at least 3 values
-        if num_datarows >= 3:
-            _inferred_freq = pd.infer_freq(self.file_df.index)
-            freqfrom = 'data (full)' if _inferred_freq else '-'  # Freq detected from full data, best case
-
-        # If this did not work, try more
-        # Try to infer freq from first x and last x rows of data, if these
-        # match we can be relatively certain that the file has the same freq
-        # from start to finish.
-
-        # Try to infer freq from first x and last x rows of data, must match
-        if not _inferred_freq and num_datarows > 0:
-            for ndr in range(50, 5, -1):  # ndr = number of data rows
-                if num_datarows >= ndr * 2:  # Same amount of ndr needed for start and end of file
-                    _inferred_freq_start = pd.infer_freq(self.file_df.index[0:ndr])
-                    _inferred_freq_end = pd.infer_freq(self.file_df.index[-ndr:])
-                    _inferred_freq = _inferred_freq_start if _inferred_freq_start == _inferred_freq_end else None
-                    if _inferred_freq:
-                        freqfrom = f'data {ndr}+{ndr}' if _inferred_freq else '-'
-                        break
-                else:
-                    continue
-
-        # Assign freq
-        if _inferred_freq:
-            freq = _inferred_freq if _inferred_freq == self.data_raw_freq \
-                else f"-mismatch-{_inferred_freq}-vs-{self.data_raw_freq}-"
-        else:
-            # If that did not work, use given freq from settings
-            freq = self.data_raw_freq
-            freqfrom = 'config'
-        return freq, freqfrom
-
-    # def _get_alternating_freq(self) -> str:
-    #     """ Check whether this is an -ALTERNATING- filetype and assign
-    #     the correct data raw freq from the config files
-    #
-    #     -ALTERNATING- files store data from different sources in one single
-    #     file. An integer ID at the start of each record indicates where the data
-    #     records of the respective data row originated. Both data sources
-    #     can be stored in different time resolutions, resulting in data files
-    #     that have e.g. 30MIN records for records of one ID, and irregular frequency
-    #     for records from the other ID, all mixed in one file.
-    #
-    #     This method returns the freq for the respective ID from the config file.
-    #
-    #     For -ALTERNATING- files, the setting 'data_keep_good_rows' is
-    #     stored as a list in the config file, e.g., data_keep_good_rows: [ 0, 104, 204 ].
-    #     Likewise, 'data_raw_freq' is stored as list, e.g. data_raw_freq: [ 30T, irregular ]
-    #     """
-    #     found_data_raw_freq = None
-    #     data_keep_good_rows = self.filetypeconf['data_keep_good_rows']
-    #     data_raw_freq = self.filetypeconf['data_raw_freq']
-    #     if (
-    #             (isinstance(data_keep_good_rows, list))
-    #             and (isinstance(data_raw_freq, list))
-    #     ):
-    #         if (
-    #                 (len(data_keep_good_rows) == 3)
-    #                 and (len(data_raw_freq) == 2)
-    #         ):
-    #             # In this case there must be a column named ID which contains
-    #             # info about the stored data
-    #             _df = self.file_df.copy()
-    #             _df.columns = _df.columns.droplevel(1)
-    #             if 'ID' in _df.columns:
-    #                 uniq_ids = _df['ID'].unique()
-    #                 if len(uniq_ids) == 1:
-    #                     this_id = uniq_ids[0]
-    #                     data_raw_freq_ix = data_keep_good_rows.index(this_id) - 1
-    #                     found_data_raw_freq = data_raw_freq[data_raw_freq_ix]
-    #     return found_data_raw_freq
 
     @staticmethod
     def _init_varscanner_df() -> pd.DataFrame:

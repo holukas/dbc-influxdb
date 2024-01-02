@@ -47,7 +47,8 @@ def fields_in_measurement(bucket: str, measurement: str, days: int = 9999) -> st
     schema.measurementFieldKeys(
     bucket: "{bucket}",
     measurement: "{measurement}",
-    start: -{days}d)
+    start: -{days}d
+    )
     '''
     return query
 

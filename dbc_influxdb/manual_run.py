@@ -115,7 +115,6 @@ def download():
 
     # data_simple.to_csv("F:\Downloads\_temp\del.csv")
     print(data_simple)
-    print(data_simple)
 
 
 if __name__ == '__main__':

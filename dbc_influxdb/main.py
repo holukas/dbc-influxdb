@@ -1,17 +1,17 @@
 # https://www.geeksforgeeks.org/getter-and-setter-in-python/
+import fnmatch
+import os
 from pathlib import Path
 
 import dateutil.parser as parser
+import dbc_influxdb.fluxql as fluxql
 import pandas as pd
 import yaml
-from influxdb_client import WriteOptions
-from pandas import DataFrame
-
-import dbc_influxdb.fluxql as fluxql
 from dbc_influxdb.common import tags, convert_ts_to_timezone
 from dbc_influxdb.db import get_client, get_query_api
-from dbc_influxdb.filetypereader import FileTypeReader, get_conf_filetypes, read_configfile
 from dbc_influxdb.varscanner import VarScanner
+from influxdb_client import WriteOptions
+from pandas import DataFrame
 
 
 class dbcInflux:
@@ -101,14 +101,13 @@ class dbcInflux:
 
     def upload_filetype(self,
                         file_df: DataFrame,
-                        data_version: str,
                         data_vars: dict,
                         data_raw_freq: str,
-                        fileinfo: dict,
+                        freq: str,
                         to_bucket: str,
+                        config_filetype: str,
                         filetypeconf: dict,
                         timezone_of_timestamp: str,
-                        parse_var_pos_indices: bool = True,
                         logger=None) -> DataFrame:
         """
         Upload data from file
@@ -137,15 +136,14 @@ class dbcInflux:
                                                     timezone_of_timestamp=timezone_of_timestamp)
 
         varscanner = VarScanner(file_df=file_df,
-                                data_version=data_version,
                                 data_vars=data_vars,
                                 data_raw_freq=data_raw_freq,
-                                fileinfo=fileinfo,
+                                freq=freq,
+                                config_filetype=config_filetype,
                                 filetypeconf=filetypeconf,
                                 conf_unitmapper=self.conf_unitmapper,
                                 to_bucket=to_bucket,
                                 conf_db=self.conf_db,
-                                parse_var_pos_indices=parse_var_pos_indices,
                                 logger=logger)
         varscanner.run()
         return varscanner.get_results()
@@ -420,16 +418,16 @@ class dbcInflux:
         """
         return timestamp_index.tz_localize(timezone_of_timestamp)  # v0.3.1
 
-    def readfile(self, filepath: str, filetype: str, nrows=None, logger=None, timezone_of_timestamp=None):
+    def readfile(self, filepath: str, filetypeconf: str, nrows=None, logger=None, timezone_of_timestamp=None):
         # Read data of current file
         logtxt = f"[{self.script_id}] Reading file {filepath} ..."
         logger.info(logtxt) if logger else print(logtxt)
-        filetypeconf = self.conf_filetypes[filetype]
+        # filetypeconf = self.conf_filetypes[filetype]
         df_list, fileinfo, missed_ids = FileTypeReader(filepath=filepath,
-                                           filetype=filetype,
-                                           filetypeconf=filetypeconf,
-                                           nrows=nrows).get_data()
-        return df_list, filetypeconf, fileinfo, missed_ids
+                                                       filetype=filetype,
+                                                       filetypeconf=filetypeconf,
+                                                       nrows=nrows).get_data()
+        return df_list, fileinfo, missed_ids
 
     def _read_configs(self):
 
@@ -443,7 +441,7 @@ class dbcInflux:
         _file_dbconf = Path(f"{self.dirconf}_secret") / 'dbconf.yaml'
 
         # Read configs
-        conf_filetypes = get_conf_filetypes(dir=_dir_filegroups)
+        conf_filetypes = get_conf_filetypes(folder=_dir_filegroups)
         conf_unitmapper = read_configfile(config_file=_file_unitmapper)
         conf_dirs = read_configfile(config_file=_file_dirs)
         conf_db = read_configfile(config_file=_file_dbconf)
@@ -521,6 +519,36 @@ class dbcInflux:
                 if var in fieldslist:
                     assigned_measurements[var] = m
         return assigned_measurements
+
+
+def get_conf_filetypes(folder: Path, ext: str = 'yaml') -> dict:
+    """Search config files with file extension *ext* in folder *dir*"""
+    folder = str(folder)  # Required as string for os.walk
+    conf_filetypes = {}
+    for root, dirs, files in os.walk(folder):
+        for f in files:
+            if fnmatch.fnmatch(f, f'*.{ext}'):
+                _filepath = Path(root) / f
+                _dict = read_configfile(config_file=_filepath)
+                _key = list(_dict.keys())[0]
+                _vals = _dict[_key]
+                conf_filetypes[_key] = _vals
+    return conf_filetypes
+
+
+def read_configfile(config_file) -> dict:
+    """
+    Load configuration from YAML file
+
+    kudos: https://stackoverflow.com/questions/57687058/yaml-safe-load-special-character-from-file
+
+    :param config_file: YAML file with configuration
+    :return: dict
+    """
+    with open(config_file, 'r', encoding='utf-8') as f:
+        data = yaml.safe_load(f)
+        # data = yaml.load(f, Loader=SafeLoader)
+    return data
 
 # def show_settings(self):
 #     print("Currently selected:")

@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.11.0 | 2 Jan 2024
+ 
+- Removed `FileTypeReader`, it is now part of the `dataflow` script
+- Various refactorings
+
 ## v0.10.2 | 8 Dec 2023
  
 - Fixed bug where `missed_ids` was referenced before assignment for filetypes that are not `-ALTERNATING-`.
