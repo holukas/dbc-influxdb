@@ -88,14 +88,14 @@ def download():
     """
 
     # Settings
-    SITE = 'ch-dav'  # Site name
-    VAR1 = 'SW_IN_NABEL_T1_35_1'
-    DATA_VERSION = 'meteoscreening'
-    DIRCONF = r'F:\Sync\luhk_work\20 - CODING\22 - POET\configs'  # Folder with configurations
-    MEASUREMENTS = ['SW']  # Measurement name
+    SITE = 'ch-tan'  # Site name
+    VAR1 = 'Power_Tot_X_X_X'
+    DATA_VERSION = 'raw'
+    DIRCONF = r'L:\Sync\luhk_work\20 - CODING\22 - POET\configs'  # Folder with configurations
+    MEASUREMENTS = ['_instrumentmetrics']  # Measurement name
     FIELDS = [VAR1]  # Variable name; InfluxDB stores variable names as '_field'
-    START = '2021-01-01 00:00:01'  # Download data starting with this date
-    STOP = '2021-01-05 00:00:01'  # Download data before this date (the stop date itself is not included)
+    START = '2024-03-05 00:00:01'  # Download data starting with this date
+    STOP = '2024-03-15 00:00:01'  # Download data before this date (the stop date itself is not included)
     TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # Timezone, e.g. "1" is translated to timezone "UTC+01:00" (CET, winter time)
 
     # Instantiate class
@@ -104,7 +104,7 @@ def download():
     # Data download
     data_simple, data_detailed, assigned_measurements = \
         dbc.download(
-            bucket=f"{SITE}_processing",
+            bucket=f"{SITE}_raw",
             measurements=MEASUREMENTS,
             fields=FIELDS,
             start=START,

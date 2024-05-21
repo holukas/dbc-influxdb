@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.11.2 | 21 May 2024
+
+- Python 3.11 is now allowed in `pyproject.toml`: `python = ">=3.9,<3.12"`
+
 ## v0.11.1 | 2 Mar 2024
 
 - Change in environment: now using `conda` env with specific Python version `3.9.18`. `poetry` is still used for

@@ -89,6 +89,10 @@ class VarScanner:
 
             counter += 1
 
+            # if dfvar[0] == 'PREC_T1_0x50_1_Tot':
+            #     print("STOP")
+            # print(type(self.file_df[dfvar]))
+
             # Check if data are available, skip var if not
             if self.file_df[dfvar].dropna().empty:
                 self.vars_empty_not_uploaded.append(dfvar)
