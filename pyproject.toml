@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "dbc-influxdb"
-version = "0.11.2"
-description = "database communication with InfluxDB v2"
+version = "0.11.3"
+description = "Database communication with InfluxDB v2."
 authors = ["Lukas Hörtnagl <holukas@ethz.ch>"]
 readme = "README.md"
 packages = [{ include = "dbc_influxdb" }]

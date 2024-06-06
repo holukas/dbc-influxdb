@@ -24,6 +24,7 @@ class VarScanner:
             conf_unitmapper: dict,
             to_bucket: str,
             conf_db: dict,
+            ingest: bool = True,
             logger=None
     ):
         self.file_df = file_df
@@ -34,6 +35,7 @@ class VarScanner:
         self.filetypeconf = filetypeconf  # Configuration dict for this filetype
         self.conf_unitmapper = conf_unitmapper
         self.to_bucket = to_bucket
+        self.ingest = ingest  # If False, no upload to database, for testing purposes to run only VarScanner
         self.conf_db = conf_db
         self.log = logger if logger else None
 
@@ -82,7 +84,7 @@ class VarScanner:
         """Loop over vars in file"""
 
         numvars = len(self.file_df.columns)
-        counter = 0
+        counter = 0        
 
         # Find variables
         for dfvar in self.file_df.columns.to_list():
@@ -189,19 +191,28 @@ class VarScanner:
         var_df['data_version'] = newvar['data_version']
         var_df['gain'] = newvar['gain']
 
-        # Write to db
-        # Output also the source file to log
-        logtxt = f"{self.script_id} " \
-                 f"--> UPLOAD TO DATABASE BUCKET {newvar['db_bucket']}:  " \
-                 f"{newvar['raw_varname']} as {newvar['field']}  " \
-                 f"Var #{counter} of {numvars}"
-        self.log.info(logtxt) if self.log else print(logtxt)
 
-        write_api.write(newvar['db_bucket'],
-                        record=var_df,
-                        data_frame_measurement_name=newvar['measurement'],
-                        data_frame_tag_columns=tags,
-                        write_precision='s')
+
+        if self.ingest:
+            # Write to db
+            # Output also the source file to log
+            logtxt = f"{self.script_id} " \
+                     f"--> UPLOAD TO DATABASE BUCKET {newvar['db_bucket']}:  " \
+                     f"{newvar['raw_varname']} as {newvar['field']}  " \
+                     f"Var #{counter} of {numvars}"
+            self.log.info(logtxt) if self.log else print(logtxt)            
+            
+            write_api.write(newvar['db_bucket'],
+                            record=var_df,
+                            data_frame_measurement_name=newvar['measurement'],
+                            data_frame_tag_columns=tags,
+                            write_precision='s')
+        else:
+            logtxt = f"{self.script_id} " \
+                     f"XXX ingest={self.ingest} SELECTED XXX NO UPLOAD XXX TO DATABASE BUCKET {newvar['db_bucket']}:  " \
+                     f"{newvar['raw_varname']} as {newvar['field']}  " \
+                     f"Var #{counter} of {numvars}"
+            self.log.info(logtxt) if self.log else print(logtxt)
 
     def _init_varentry(self, rawvar) -> dict:
         """Collect variable info"""

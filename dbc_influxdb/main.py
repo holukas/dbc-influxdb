@@ -108,6 +108,7 @@ class dbcInflux:
                         config_filetype: str,
                         filetypeconf: dict,
                         timezone_of_timestamp: str,
+                        ingest: bool=True,
                         logger=None) -> DataFrame:
         """
         Upload data from file
@@ -124,6 +125,8 @@ class dbcInflux:
             filetypeconf:
             timezone_of_timestamp: e.g. 'UTC+01:00', see docstring in `.add_timezone_info' for more details
             parse_var_pos_indices:
+            ingest: If False, no data will be uploaded to database, but VarScanner will still run.
+                Implemented for testing purposes.
             logger:
 
         Returns:
@@ -144,6 +147,7 @@ class dbcInflux:
                                 conf_unitmapper=self.conf_unitmapper,
                                 to_bucket=to_bucket,
                                 conf_db=self.conf_db,
+                                ingest=ingest,
                                 logger=logger)
         varscanner.run()
         return varscanner.get_results()
