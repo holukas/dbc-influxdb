@@ -5,7 +5,7 @@
 - Added parameter `ingest` in `.upload_filetype()`. If `True`, variables are uploaded to the database. If `False`, the
   variables are not uploaded. The parameter was implemented for testing purposes to run `VarScanner` without uploading
   data. This allows a much quicker scan of available (and missed) variables before
-  uploading. (`dbc_influxdb.main.dbcInflux.upload_filetype`)
+  uploading. (`dbc_influxdb.main.dbcInflux.upload_filetype`) 
 
 ## v0.11.2 | 21 May 2024
 
