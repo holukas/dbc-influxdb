@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.11.3 | XX Jun 2024
+## v0.11.3 | 11 Jun 2024
 
 - Added parameter `ingest` in `.upload_filetype()`. If `True`, variables are uploaded to the database. If `False`, the
   variables are not uploaded. The parameter was implemented for testing purposes to run `VarScanner` without uploading
