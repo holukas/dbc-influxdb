@@ -1,6 +1,10 @@
+# Ignore future warnings for pandas 3.0
+import warnings
 from pathlib import Path
 
 from dbc_influxdb.main import dbcInflux
+
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 
 def upload_specific_file():
@@ -88,14 +92,15 @@ def download():
     """
 
     # Settings
-    SITE = 'ch-tan'  # Site name
-    VAR1 = 'Power_Tot_X_X_X'
-    DATA_VERSION = 'raw'
-    DIRCONF = r'L:\Sync\luhk_work\20 - CODING\22 - POET\configs'  # Folder with configurations
-    MEASUREMENTS = ['_instrumentmetrics']  # Measurement name
+    SITE = 'ch-cha'  # Site name
+    BUCKET = f'{SITE}_processed'
+    VAR1 = 'RH_T1_2_1'
+    DATA_VERSION = 'meteoscreening'
+    DIRCONF = r'F:\Sync\luhk_work\20 - CODING\22 - POET\configs'  # Folder with configurations
+    MEASUREMENTS = ['RH']  # Measurement name
     FIELDS = [VAR1]  # Variable name; InfluxDB stores variable names as '_field'
-    START = '2024-03-05 00:00:01'  # Download data starting with this date
-    STOP = '2024-03-15 00:00:01'  # Download data before this date (the stop date itself is not included)
+    START = '2022-04-01 00:00:01'  # Download data starting with this date
+    STOP = '2022-04-03 00:00:01'  # Download data before this date (the stop date itself is not included)
     TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # Timezone, e.g. "1" is translated to timezone "UTC+01:00" (CET, winter time)
 
     # Instantiate class
@@ -104,7 +109,7 @@ def download():
     # Data download
     data_simple, data_detailed, assigned_measurements = \
         dbc.download(
-            bucket=f"{SITE}_raw",
+            bucket=BUCKET,
             measurements=MEASUREMENTS,
             fields=FIELDS,
             start=START,
@@ -117,6 +122,123 @@ def download():
     print(data_simple)
 
 
+def download_and_reupload():
+    """
+    Download data from database bucket, adjust tags and then re-upload to different bucket
+    """
+
+    # Settings
+    SITE = 'ch-cha'  # Site name
+    DIRCONF = r'F:\Sync\luhk_work\20 - CODING\22 - POET\configs'  # Folder with configurations
+
+    # Instantiate class
+    dbc = dbcInflux(dirconf=DIRCONF)
+
+    download_settings = dict(
+        bucket=f'{SITE}_processed',
+        # fields=['TA_T1_2_1'],  # Variable name; InfluxDB stores variable names as '_field'
+        # measurements=['TA'],  # Measurement name
+        start='2023-01-01 00:00:01',  # Download data starting with this date
+        stop='2023-02-01 00:00:01',  # Download data before this date (the stop date itself is not included)
+        data_version='meteoscreening_diive',
+        timezone_offset_to_utc_hours=1  # Timezone, e.g. "1" is translated to timezone "UTC+01:00" (CET, winter time)
+    )
+
+    # Data download
+    data_simple, data_detailed, assigned_measurements = \
+        dbc.download(**download_settings)
+
+    dkeys = data_detailed.keys()
+
+    # Rename columns where needed
+    oldcols = [oldkey for oldkey in list(dkeys) if '_T1B2_' in oldkey]
+    for oldcol in oldcols:
+        newcol = str(oldcol).replace('_T1B2_', '_T1_')
+        assigned_measurements[newcol] = assigned_measurements.pop(oldcol)
+        data_detailed[newcol] = data_detailed.pop(oldcol)
+        data_detailed[newcol] = data_detailed[newcol].rename(columns={oldcol: newcol}, inplace=False)
+        data_detailed[newcol]['hpos'] = 'T1'
+        data_detailed[newcol]['varname'] = newcol
+
+    # Update available dict keys
+    dkeys = data_detailed.keys()
+
+    # Update tags for all variables
+    for var in dkeys:
+        data_detailed[var]['site'] = SITE
+        data_detailed[var]['offset'] = 0.0  # float
+        data_detailed[var]['gain'] = 1.0  # float
+        data_detailed[var]['data_version'] = 'meteoscreening_diive'
+        # Convert frequency strings to current pandas convention
+        for f in ['freq', 'data_raw_freq']:
+            data_detailed[var][f] = data_detailed[var][f].replace('30T', '30min')
+            data_detailed[var][f] = data_detailed[var][f].replace('10T', '10min')
+            data_detailed[var][f] = data_detailed[var][f].replace('T', 'min')
+            data_detailed[var][f] = data_detailed[var][f].replace('10S', '10s')
+            data_detailed[var][f] = data_detailed[var][f].replace('S', 's')
+            data_detailed[var][f] = data_detailed[var][f].replace('H', 'h')
+
+    # for c in data_detailed[VAR1].columns:
+    #     print(data_detailed[VAR1][c])
+
+    for var in dkeys:
+        to_measurement = assigned_measurements[var]
+        dbc.upload_singlevar(
+            var_df=data_detailed[var],
+            to_bucket='ch-cha_processed',
+            to_measurement=to_measurement,
+            timezone_offset_to_utc_hours=1,
+            delete_from_db_before_upload=False
+        )
+
+    # data_simple.to_csv("F:\Downloads\_temp\del.csv")
+    # print(data_simple)
+
+
+def delete():
+    """
+    Delete data from database
+    """
+
+    # Settings
+    # SITE = 'ch-cha'  # Site name
+    BUCKET = f'a'
+    VAR1 = 'TRH_M1_2_1'
+    VAR2 = 'TRH_T1_4_1'
+    DATA_VERSION = 'raw'
+    # DATA_VERSION = 'eddypro_level-0'
+    DIRCONF = r'L:\Sync\luhk_work\20 - CODING\22 - POET\configs'  # Folder with configurations
+    # MEASUREMENTS = True
+    MEASUREMENTS = ['SW']  # Measurement name
+    FIELDS = True
+    # FIELDS = [VAR1, VAR2]  # Variable name; InfluxDB stores variable names as '_field'
+    START = '2009-03-15 00:00:01'  # Download data starting with this date
+    STOP = '2011-03-25 00:00:01'  # Download data before this date (the stop date itself is not included)
+    TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # Timezone, e.g. "1" is translated to timezone "UTC+01:00" (CET, winter time)
+
+    # Instantiate class
+    dbc = dbcInflux(dirconf=DIRCONF)
+
+    # Data download
+    dbc.delete(
+        bucket=BUCKET,
+        measurements=MEASUREMENTS,
+        fields=FIELDS,
+        start=START,
+        stop=STOP,
+        timezone_offset_to_utc_hours=TIMEZONE_OFFSET_TO_UTC_HOURS,
+        data_version=DATA_VERSION
+    )
+
+
 if __name__ == '__main__':
+    import pandas as pd
+
+    pd.options.display.width = None
+    pd.options.display.max_columns = None
+    pd.set_option('display.max_rows', 3000)
+    pd.set_option('display.max_columns', 3000)
     # upload_specific_file()
-    download()
+    # download()
+    delete()
+    # download_and_reupload()
