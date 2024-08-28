@@ -4,14 +4,14 @@ import os
 from pathlib import Path
 
 import dateutil.parser as parser
-import dbc_influxdb.fluxql as fluxql
 import pandas as pd
 import yaml
-from dbc_influxdb.common import tags, convert_ts_to_timezone
-from dbc_influxdb.db import get_client, get_query_api
-from dbc_influxdb.varscanner import VarScanner
 from influxdb_client import WriteOptions
 from pandas import DataFrame
+
+import dbc_influxdb.fluxql as fluxql
+from dbc_influxdb.common import tags, convert_ts_to_timezone
+from dbc_influxdb.db import get_client, get_query_api, get_delete_api
 
 
 class dbcInflux:
@@ -36,26 +36,72 @@ class dbcInflux:
         self._measurements = None
         self._fields = None
 
+    def _add_timestamp_utc(self, timestamp_index, timezone_offset_to_utc_hours) -> pd.DatetimeIndex:
+        # Needs to be in format '2022-05-27 00:00:00+01:00' for InfluxDB
+        sign = '+' if timezone_offset_to_utc_hours >= 0 else '-'
+        timezone_offset_to_utc_hours = str(timezone_offset_to_utc_hours).zfill(2) \
+            if timezone_offset_to_utc_hours < 10 \
+            else timezone_offset_to_utc_hours
+        utc_str = f'{sign}{timezone_offset_to_utc_hours}:00'
+        timestamp_index_utc = timestamp_index.tz_localize(utc_str)
+        return timestamp_index_utc
+
     def upload_singlevar(self,
                          var_df: DataFrame,
                          to_bucket: str,
                          to_measurement: str,
-                         timezone_of_timestamp: str):
-        """Upload single variable to database
-
+                         timezone_offset_to_utc_hours: int,
+                         delete_from_db_before_upload: bool = True):
+        """Upload single variable to database.
+        
         The database needs to know the timezone because all data in the db are
         stored in UTC/GMT.
+        
+        Args:
+            var_df: contains measured variable data and tags (data_detailed)
+            to_bucket: name of database bucket
+            to_measurement: name of measurement, e.g. 'TA'
+            timezone_offset_to_utc_hours: e.g. 1, see docstring in `._add_timestamp_utc' for more details
+            delete_from_db_before_upload: data between the start and end dates of *var_df* are 
+                deleted before uploading. All data with the same variable name are deleted. 
+                Implemented to avoid duplicate uploads of the same data in cases where data
+                remained the same, but one of the tags has changed.
 
-        :param var_df: contains measured variable data and tags (data_detailed)
-        :param to_bucket: name of database bucket
-        :param to_measurement: name of measurement, e.g. 'TA'
-        :param timezone_of_timestamp: e.g. 'UTC+01:00', see docstring in `.add_timezone_info' for more details
-        :return:
+        Returns:
+            Nothing, only uploads to database.
+
         """
+        data_cols = var_df.columns.to_list()
 
-        # Add timezone info
-        var_df.index = self._add_timezone_info(timestamp_index=var_df.index,
-                                               timezone_of_timestamp=timezone_of_timestamp)
+        # Check if data contain all tag columns
+        cols_not_in_data = [l for l in tags if l not in data_cols]
+        if len(cols_not_in_data) > 0:
+            raise Exception(f"Data do not contain required tag columns: {cols_not_in_data}")
+
+        # Detect field name (variable name)
+        # The field name is the name of the column that is not part of the tags
+        field = [l for l in data_cols if l not in tags]
+        if len(field) > 1:
+            raise Exception(f"Only one field (variable name) allowed, found {field}.")
+
+        if delete_from_db_before_upload:
+            start = str(var_df.index[0])
+            stop = str(var_df.index[-1])
+            data_version = list(set(var_df['data_version'].tolist()))
+            if len(data_version) > 1:
+                raise ValueError('Multiple data versions not supported')
+            data_version = data_version[0]
+            self.delete(bucket=to_bucket, measurements=[to_measurement],
+                        start=start, stop=stop, timezone_offset_to_utc_hours=1,
+                        data_version=data_version, fields=field)
+
+        # Add timezone info to timestamp
+        # var_df.index.tz
+        var_df.index = self._add_timestamp_utc(timestamp_index=var_df.index,
+                                               timezone_offset_to_utc_hours=timezone_offset_to_utc_hours)
+        # # Old:
+        # var_df.index = self._add_timezone_info(timestamp_index=var_df.index,
+        #                                        timezone_of_timestamp=timezone_of_timestamp)
 
         # Database clients
         print("Connecting to database ...")
@@ -74,22 +120,9 @@ class dbcInflux:
                                                          max_retry_delay=30_000,
                                                          exponential_base=2)) as write_api:
 
-            data_cols = var_df.columns.to_list()
-
-            # Check if data contain all tag columns
-            cols_not_in_data = [l for l in tags if l not in data_cols]
-            if len(cols_not_in_data) > 0:
-                raise Exception(f"Data do not contain required tag columns: {cols_not_in_data}")
-
-            # Detect field name (variable name)
-            # The field name is the name of the column that is not part of the tags
-            field = [l for l in data_cols if l not in tags]
-            if len(field) > 1:
-                raise Exception("Only one field (variable name) allowed.")
-
             # Write to db
             # Output also the source file to log
-            print(f"--> UPLOAD TO DATABASE BUCKET {to_bucket}:  {field}")
+            print(f"--> UPLOAD TO DATABASE BUCKET {to_bucket}:  {field} ", end=" ")
 
             write_api.write(to_bucket,
                             record=var_df,
@@ -99,67 +132,14 @@ class dbcInflux:
 
             print("Upload finished.")
 
-    def upload_filetype(self,
-                        file_df: DataFrame,
-                        data_vars: dict,
-                        data_raw_freq: str,
-                        freq: str,
-                        to_bucket: str,
-                        config_filetype: str,
-                        filetypeconf: dict,
-                        timezone_of_timestamp: str,
-                        ingest: bool=True,
-                        logger=None) -> DataFrame:
-        """
-        Upload data from file
-
-        Primary method to automatically upload data from files to
-        the database with the 'dataflow' package.
-
-        Args:
-            file_df:
-            data_version:
-            data_vars:
-            fileinfo:
-            to_bucket:
-            filetypeconf:
-            timezone_of_timestamp: e.g. 'UTC+01:00', see docstring in `.add_timezone_info' for more details
-            parse_var_pos_indices:
-            ingest: If False, no data will be uploaded to database, but VarScanner will still run.
-                Implemented for testing purposes.
-            logger:
-
-        Returns:
-
-        """
-
-        # Add timezone info
-        if not file_df.index.tzinfo:
-            file_df.index = self._add_timezone_info(timestamp_index=file_df.index,
-                                                    timezone_of_timestamp=timezone_of_timestamp)
-
-        varscanner = VarScanner(file_df=file_df,
-                                data_vars=data_vars,
-                                data_raw_freq=data_raw_freq,
-                                freq=freq,
-                                config_filetype=config_filetype,
-                                filetypeconf=filetypeconf,
-                                conf_unitmapper=self.conf_unitmapper,
-                                to_bucket=to_bucket,
-                                conf_db=self.conf_db,
-                                ingest=ingest,
-                                logger=logger)
-        varscanner.run()
-        return varscanner.get_results()
-
     def download(self,
                  bucket: str,
-                 measurements: list,
-                 fields: list,
                  start: str,
                  stop: str,
                  timezone_offset_to_utc_hours: int,  # v0.3.0
                  data_version: str,
+                 measurements: list = None,
+                 fields: list = None,
                  verify_freq: str = False) -> tuple[DataFrame, dict, dict]:
         """
         Get data from database between 'start' and 'stop' dates
@@ -189,10 +169,14 @@ class dbcInflux:
 
         """
 
-        print(f"Downloading from bucket {bucket}:\n"
-              f"    variables {fields} from measurements {measurements}\n"
-              f"    between {start} and {stop}\n"
-              f"    in data version {data_version}\n"
+        fields_str = fields if fields else "ALL"
+        measurements_str = measurements if measurements else "ALL"
+        print(f"\nDOWNLOADING\n"
+              f"    from bucket {bucket}\n"
+              f"    variables {fields_str}\n"
+              f"    from measurements {measurements_str}\n"
+              f"    from data version {data_version}\n"
+              f"    between {start} and {stop}\n"              
               f"    with timezone offset to UTC of {timezone_offset_to_utc_hours}")
 
         # InfluxDB needs ISO 8601 date format (in requested timezone) for query
@@ -204,25 +188,45 @@ class dbcInflux:
         # Assemble query
         bucketstring = fluxql.bucketstring(bucket=bucket)
         rangestring = fluxql.rangestring(start=start_iso, stop=stop_iso)
-        measurementstring = fluxql.filterstring(queryfor='_measurement', querylist=measurements, type='or')
-        fieldstring = fluxql.filterstring(queryfor='_field', querylist=fields, type='or')
-        dropstring = fluxql.dropstring()
+
+        if measurements:
+            measurementstring = fluxql.filterstring(queryfor='_measurement', querylist=measurements, type='or')
+        else:
+            measurementstring = ''  # Empty means all measurements
+
+        if fields:
+            fieldstring = fluxql.filterstring(queryfor='_field', querylist=fields, type='or')
+        else:
+            fieldstring = ''  # Empty means all fields
+
+        # dropstring = fluxql.dropstring()
         pivotstring = fluxql.pivotstring()
 
+        dataversionstring = ''
         if data_version:
             dataversionstring = fluxql.filterstring(queryfor='data_version', querylist=[data_version], type='or')
             querystring = f"{bucketstring} {rangestring} {measurementstring} " \
-                          f"{dataversionstring} {fieldstring} {dropstring} {pivotstring}"
+                          f"{dataversionstring} {fieldstring} {pivotstring}"
         else:
             # keepstring = f'|> keep(columns: ["_time", "_field", "_value", "units", "freq"])'
             querystring = f"{bucketstring} {rangestring} {measurementstring} " \
-                          f"{fieldstring} {dropstring} {pivotstring}"
+                          f"{fieldstring} {pivotstring}"
 
         # Run database query
         client = get_client(self.conf_db)
         query_api = get_query_api(client)
         tables = query_api.query_data_frame(query=querystring)  # List of DataFrames
         client.close()
+        print("Used querystring:", querystring)
+        print("querystring was constructed from:")
+        print(f"    bucketstring: {bucketstring}")
+        print(f"    rangestring: {rangestring}")
+        print(f"    measurementstring: {measurementstring}")
+        print(f"    dataversionstring: {dataversionstring}")
+        print(f"    fieldstring: {fieldstring}")
+        # print(f"    dropstring: {dropstring}")
+        print(f"    pivotstring: {pivotstring}")
+        print("Download finished.")
 
         # In case only one single variable is downloaded, the query returns
         # a single dataframe. If multiple variables are downloaded, the query
@@ -235,11 +239,17 @@ class dbcInflux:
         # units, freq = self._check_if_same_units_freq(results=results, field=field)
 
         # Each table in tables contains data for one variable
+        found_measurements = []
         data_detailed = {}  # Stores variables and their tags
         data_simple = DataFrame()  # Stores variables
         for ix, table in enumerate(tables):
 
-            table.drop(columns=['result', 'table'], inplace=True)
+            found_measurement = list(set(table['_measurement'].tolist()))
+            if len(found_measurement) != 1:
+                raise ValueError(f"Found {len(found_measurement)} measurements, but only one allowed")
+            found_measurements.append(found_measurement[0])
+
+            # table.drop(columns=['result', 'table', '_measurement'], inplace=True)
 
             # Queries are always returned w/ UTC timestamp
             # Create timestamp columns
@@ -268,13 +278,25 @@ class dbcInflux:
             # Remove timezone info from UTC timestamp, header already states it's UTC
             table['TIMESTAMP_UTC_END'] = table['TIMESTAMP_UTC_END'].dt.tz_localize(None)  # Timezone!
 
-            # Remove UTC timestamp from columns
-            table.drop('TIMESTAMP_UTC_END', axis=1, inplace=True)
+            # # Remove UTC timestamp from columns
+            # table.drop('TIMESTAMP_UTC_END', axis=1, inplace=True)
 
             # Detect of which variable the frame contains data
-            field_in_table = [f for f in fields if f in table.columns]
+            # Here it is useful that the variable name is also available as tag 'varname'.
+            # field_in_table = [f for f in fields if f in table.columns]
+            list_of_fields = list(set(table['varname'].tolist()))
 
-            key = field_in_table[0]
+            # Current table must contain one single variable name
+            if len(list_of_fields) != 1:
+                raise ValueError(f"Expected one field, got {list_of_fields}")
+
+            field_in_table = list_of_fields[0]
+            key = field_in_table
+
+            # Keep all columns that are either the field or database tags
+            keepcols = [col for col in table.columns if col in tags]
+            keepcols.append(key)
+            table = table[keepcols].copy()
 
             # Collect variables without tags in a separate (simplified) dataframe.
             # This dataframe only contains the timestamp and the data column of each var.
@@ -323,8 +345,14 @@ class dbcInflux:
             num_records = len(data_detailed[key])
             first_date = data_detailed[key].index[0]
             last_date = data_detailed[key].index[-1]
-            print(f"    {key}   ({num_records} records)     "
-                  f"first date: {first_date}    last date: {last_date}")
+            print(f"<-- {key}  "
+                  f"({num_records} records)  "
+                  f"first date: {first_date}  "
+                  f"last date: {last_date}")
+
+        if not measurements:
+            found_measurements = list(set(found_measurements))
+            measurements = found_measurements
 
         assigned_measurements = self._detect_measurement_for_field(bucket=bucket,
                                                                    measurementslist=measurements,
@@ -336,6 +364,115 @@ class dbcInflux:
             freq, freqfrom = infer_freq(df_index=data_simple.index)
 
         return data_simple, data_detailed, assigned_measurements
+
+    def delete(self,
+               bucket: str,
+               measurements: list or True,
+               start: str,
+               stop: str,
+               timezone_offset_to_utc_hours: int,  # v0.3.0
+               data_version: str or True,
+               fields: list or True) -> None:
+        """
+        Delete data from bucket
+
+        Args:
+            bucket: name of bucket in database
+            measurements: list or True
+                If list, list of measurements in database, e.g. ['TA', 'SW']
+                If True, all *fields* in all *measurements* will be deleted
+            fields: list or True
+                If list, list of fields (variable names) to delete
+                If True, all data in *fields* in *measurements* will be deleted.
+            start: start datetime, e.g. '2022-07-04 00:30:00'
+            stop: stop datetime, e.g. '2022-07-05 12:00:00'
+            timezone_offset_to_utc_hours: the timezone of *start* and *stop* datetimes.
+                Necessary because the database always stores data with UTC timestamps.
+                For example, if data were originally recorded using CET (winter time),
+                which corresponds to UTC+01:00, and all data between 1 Jun 2024 00:30 CET and
+                2 Jun 2024 12:00 CET should be deleted, then *timezone_offset_to_utc_hours=1*.
+            data_version: version ID of the data that should be deleted,
+                e.g. 'meteoscreening', 'raw', 'myID', ...
+
+        Examples:
+
+            Delete all variables across all measurements:
+                measurements=True, fields=True
+
+            Delete all variables of a specific measurement:
+                measurements=['TA'], fields=True
+
+
+            Delete specific variables in specific measurements:
+                measurements=['TA', 'SW'], fields=['TA_T1_1_1', 'SW_T1_1_1']
+
+            Delete specific variables in across all measurements:
+                measurements=True, fields=['TA_T1_1_1', 'SW_T1_1_1']
+                This basically searches the variables across all measurements
+                and the deletes them.
+
+        Returns:
+            -
+
+        docs:
+        - https://influxdb-client.readthedocs.io/en/stable/usage.html#delete-data
+        - https://docs.influxdata.com/influxdb/v2/reference/syntax/delete-predicate/
+
+        """
+
+        # InfluxDB needs ISO 8601 date format (in requested timezone) for query
+        start_iso = self._convert_datestr_to_iso8601(datestr=start,
+                                                     timezone_offset_to_utc_hours=timezone_offset_to_utc_hours)
+        stop_iso = self._convert_datestr_to_iso8601(datestr=stop,
+                                                    timezone_offset_to_utc_hours=timezone_offset_to_utc_hours)
+
+        # Run database query
+        client = get_client(self.conf_db)
+        delete_api = get_delete_api(client)
+
+        # Check if measurements is boolean and True
+        measurements_all = False
+        if measurements and isinstance(measurements, bool):
+            measurements = self.show_measurements_in_bucket(bucket=bucket, verbose=False)
+            measurements_all = True
+
+        # Delete
+        kwargs = dict(start=start_iso, stop=stop_iso, bucket=bucket)
+        for measurement in measurements:
+
+            # Delete all variables (fields) in measurement
+            if fields and isinstance(fields, bool):
+                predicate_str = (f'_measurement="{measurement}" '
+                                 f'AND data_version="{data_version}"')
+                delete_api.delete(predicate=predicate_str, **kwargs)
+
+            # Delete given variables (fields) in measurement
+            elif isinstance(fields, list):
+                for field in fields:
+                    predicate_str = (f'_measurement="{measurement}" '
+                                     f'AND varname="{field}" '
+                                     f'AND data_version="{data_version}"')
+                    delete_api.delete(predicate=predicate_str, **kwargs)
+
+        if measurements_all:
+            measurements_str = "ALL"
+        elif isinstance(measurements, list):
+            measurements_str = measurements
+        else:
+            measurements_str = None
+
+        if fields and isinstance(fields, bool):
+            fields_str = "ALL"
+        elif isinstance(fields, list):
+            fields_str = fields
+        else:
+            fields_str = None
+
+        print(f"Deleted variables {fields_str} between {start_iso} and {stop_iso} "
+              f"from measurements {measurements_str} in bucket {bucket}.")
+        client.close()
+
+        return None
 
     def show_configs_unitmapper(self) -> dict:
         return self.conf_unitmapper
@@ -363,21 +500,22 @@ class dbcInflux:
         print(f"Found {len(fieldslist)} fields in measurement {measurement} of bucket {bucket}.\n{'=' * 40}")
         return fieldslist
 
-    def show_fields_in_bucket(self, bucket: str) -> list:
-        """Show fields (variable names) in bucket"""
-        query = fluxql.fields_in_bucket(bucket=bucket)
+    def show_fields_in_bucket(self, bucket: str, measurement: str = None, verbose: bool = True) -> list:
+        """Show fields (variable names) in bucket (optional: for specific measurement)"""
+        query = fluxql.fields_in_bucket(bucket=bucket, measurement=measurement)
         client = get_client(self.conf_db)
         query_api = get_query_api(client)
         results = query_api.query_data_frame(query=query)
         client.close()
         fieldslist = results['_value'].tolist()
-        print(f"{'=' * 40}\nFields in bucket {bucket}:")
-        for ix, f in enumerate(fieldslist, 1):
-            print(f"#{ix}  {bucket}  {f}")
-        print(f"Found {len(fieldslist)} measurements in bucket {bucket}.\n{'=' * 40}")
+        if verbose:
+            print(f"{'=' * 40}\nFields in bucket {bucket}:")
+            for ix, f in enumerate(fieldslist, 1):
+                print(f"#{ix}  {bucket}  {f}")
+            print(f"Found {len(fieldslist)} variables (fields) in bucket {bucket}.\n{'=' * 40}")
         return fieldslist
 
-    def show_measurements_in_bucket(self, bucket: str) -> list:
+    def show_measurements_in_bucket(self, bucket: str, verbose: bool = True) -> list:
         """Show measurements in bucket"""
         query = fluxql.measurements_in_bucket(bucket=bucket)
         client = get_client(self.conf_db)
@@ -385,10 +523,11 @@ class dbcInflux:
         results = query_api.query_data_frame(query=query)
         client.close()
         measurements = results['_value'].tolist()
-        print(f"{'=' * 40}\nMeasurements in bucket {bucket}:")
-        for ix, m in enumerate(measurements, 1):
-            print(f"#{ix}  {bucket}  {m}")
-        print(f"Found {len(measurements)} measurements in bucket {bucket}.\n{'=' * 40}")
+        if verbose:
+            print(f"{'=' * 40}\nMeasurements in bucket {bucket}:")
+            for ix, m in enumerate(measurements, 1):
+                print(f"#{ix}  {bucket}  {m}")
+            print(f"Found {len(measurements)} measurements in bucket {bucket}.\n{'=' * 40}")
         return measurements
 
     def show_buckets(self) -> list:
@@ -405,33 +544,6 @@ class dbcInflux:
             print(f"#{ix}  {b}")
         print(f"Found {len(bucketlist)} buckets in database.")
         return bucketlist
-
-    @staticmethod
-    def _add_timezone_info(timestamp_index, timezone_of_timestamp: str):
-        """Add timezone info to timestamp index
-
-        No data are changed, only the timezone info is added to the timestamp.
-
-        :param: timezone_of_timestamp: If 'None', no timezone info is added. Otherwise
-            can be `str` that describes the timezone in relation to UTC in the format:
-            'UTC+01:00' (for CET), 'UTC+02:00' (for CEST), ...
-            InfluxDB uses this info to upload data (always) in UTC/GMT.
-
-        see: https://www.atmos.albany.edu/facstaff/ktyle/atm533/core/week5/04_Pandas_DateTime.html#note-that-the-timezone-is-missing-the-read-csv-method-does-not-provide-a-means-to-specify-the-timezone-we-can-take-care-of-that-though-with-the-tz-localize-method
-
-        """
-        return timestamp_index.tz_localize(timezone_of_timestamp)  # v0.3.1
-
-    def readfile(self, filepath: str, filetypeconf: str, nrows=None, logger=None, timezone_of_timestamp=None):
-        # Read data of current file
-        logtxt = f"[{self.script_id}] Reading file {filepath} ..."
-        logger.info(logtxt) if logger else print(logtxt)
-        # filetypeconf = self.conf_filetypes[filetype]
-        df_list, fileinfo, missed_ids = FileTypeReader(filepath=filepath,
-                                                       filetype=filetype,
-                                                       filetypeconf=filetypeconf,
-                                                       nrows=nrows).get_data()
-        return df_list, fileinfo, missed_ids
 
     def _read_configs(self):
 

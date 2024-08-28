@@ -1,11 +1,20 @@
 # Changelog
 
+## v0.12.0 | 28 Aug 2024
+
+- Added method to delete data from the database (`dbc_influxdb.main.dbcInflux.delete`)
+- Added notebook for downloading data (`notebooks/download_data.ipynb`)
+- Added notebook for deleting data (`notebooks/delete_data.ipynb`)
+- Option `ignore_after` is now aware of the currently used timezone
+- Deleted: `dbc_influxdb.main.dbcInflux.upload_filetype`
+- Deleted: `dbc_influxdb.varscanner.VarScanner`
+
 ## v0.11.3 | 11 Jun 2024
 
 - Added parameter `ingest` in `.upload_filetype()`. If `True`, variables are uploaded to the database. If `False`, the
   variables are not uploaded. The parameter was implemented for testing purposes to run `VarScanner` without uploading
   data. This allows a much quicker scan of available (and missed) variables before
-  uploading. (`dbc_influxdb.main.dbcInflux.upload_filetype`) 
+  uploading. (`dbc_influxdb.main.dbcInflux.upload_filetype`)
 
 ## v0.11.2 | 21 May 2024
 

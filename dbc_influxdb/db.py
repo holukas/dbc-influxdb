@@ -14,6 +14,10 @@ def get_query_api(client):
     query_api = client.query_api()
     return query_api
 
+def get_delete_api(client):
+    delete_api = client.delete_api()
+    return delete_api
+
 # def get_write_api(client):
 #     write_api = client.write_api(write_options=WriteOptions(
 #         batch_size=5000, flush_interval=10_000, jitter_interval=2_000, retry_interval=5_000,

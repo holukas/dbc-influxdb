@@ -1,5 +1,6 @@
 def dropstring():
-    return f'|> drop(columns: ["_start", "_stop", "_measurement"])'
+    return f'|> drop(columns: ["_start", "_stop"])'
+    # return f'|> drop(columns: ["_start", "_stop", "_measurement"])'
 
 
 def pivotstring():
@@ -46,7 +47,7 @@ def fields_in_measurement(bucket: str, measurement: str, days: int = 9999) -> st
     import "influxdata/influxdb/schema"
     schema.measurementFieldKeys(
     bucket: "{bucket}",
-    measurement: "{measurement}",
+    measurement: "{measurement}",    
     start: -{days}d
     )
     '''
