@@ -1,11 +1,10 @@
 import warnings
 
 import pandas as pd
-from influxdb_client import WriteOptions
-from pandas import DataFrame
-
 from dbc_influxdb.common import tags
 from dbc_influxdb.db import get_client
+from influxdb_client import WriteOptions
+from pandas import DataFrame
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
@@ -63,8 +62,6 @@ class VarScanner:
             # Loop through vars
             self._loopvars(write_api=write_api)
 
-
-
         # self.varscanner_df.sort_values(by='raw_varname', axis=0, inplace=True)
         # self.varscanner_df.index = arange(1, len(self.varscanner_df) + 1)  # Reset index, starting at 1
         self._end_log()
@@ -80,11 +77,12 @@ class VarScanner:
     def get_results(self):
         return self.varscanner_df
 
+
     def _loopvars(self, write_api):
         """Loop over vars in file"""
 
         numvars = len(self.file_df.columns)
-        counter = 0        
+        counter = 0
 
         # Find variables
         for dfvar in self.file_df.columns.to_list():
@@ -162,8 +160,10 @@ class VarScanner:
         # Ignore data after the datetime given in `ignore_after`
         if newvar['ignore_after']:
             firstdate = var_df.index[0]
+            current_timezone = firstdate.tz
             lastalloweddate = pd.to_datetime(newvar['ignore_after'], format='%Y-%m-%d %H:%M:%S')
-            lastalloweddate = pd.Timestamp(newvar['ignore_after'], tz='UTC+01:00')
+            lastalloweddate = lastalloweddate.tz_localize(current_timezone)
+            # lastalloweddate = pd.Timestamp(newvar['ignore_after'], tz='UTC+01:00')
             var_df = var_df.loc[firstdate:lastalloweddate].copy()
 
         # Remove units row (units stored as tag)
@@ -191,8 +191,6 @@ class VarScanner:
         var_df['data_version'] = newvar['data_version']
         var_df['gain'] = newvar['gain']
 
-
-
         if self.ingest:
             # Write to db
             # Output also the source file to log
@@ -200,8 +198,8 @@ class VarScanner:
                      f"--> UPLOAD TO DATABASE BUCKET {newvar['db_bucket']}:  " \
                      f"{newvar['raw_varname']} as {newvar['field']}  " \
                      f"Var #{counter} of {numvars}"
-            self.log.info(logtxt) if self.log else print(logtxt)            
-            
+            self.log.info(logtxt) if self.log else print(logtxt)
+
             write_api.write(newvar['db_bucket'],
                             record=var_df,
                             data_frame_measurement_name=newvar['measurement'],
