@@ -1,7 +1,8 @@
 # Changelog
 
-## v0.12.1 | XX Mar 2025
+## v0.13.0 | 11 Mar 2025
 
+- Added parameter to download data for multiple data versions (`dbc_influxdb.main.dbcInflux.download`)
 - Updated notebook for downloading data (`notebooks/download_data.ipynb`)
 - Updated notebook for deleting data (`notebooks/delete_data.ipynb`)
 - Updated env
