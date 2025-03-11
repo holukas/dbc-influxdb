@@ -137,7 +137,7 @@ class dbcInflux:
                  start: str,
                  stop: str,
                  timezone_offset_to_utc_hours: int,  # v0.3.0
-                 data_version: str,
+                 data_version: list = None,
                  measurements: list = None,
                  fields: list = None,
                  verify_freq: str = False) -> tuple[DataFrame, dict, dict]:
@@ -176,7 +176,7 @@ class dbcInflux:
               f"    variables {fields_str}\n"
               f"    from measurements {measurements_str}\n"
               f"    from data version {data_version}\n"
-              f"    between {start} and {stop}\n"              
+              f"    between {start} and {stop}\n"
               f"    with timezone offset to UTC of {timezone_offset_to_utc_hours}")
 
         # InfluxDB needs ISO 8601 date format (in requested timezone) for query
@@ -189,11 +189,28 @@ class dbcInflux:
         bucketstring = fluxql.bucketstring(bucket=bucket)
         rangestring = fluxql.rangestring(start=start_iso, stop=stop_iso)
 
+        # Measurements
+        # # Check if measurements is boolean and True
+        # measurements_all = False
+        # if measurements and isinstance(measurements, bool):
+        #     measurements = self.show_measurements_in_bucket(bucket=bucket, verbose=False)
+        #     measurements_all = True
         if measurements:
             measurementstring = fluxql.filterstring(queryfor='_measurement', querylist=measurements, type='or')
         else:
             measurementstring = ''  # Empty means all measurements
 
+        # Fields
+        # if fields and isinstance(fields, bool):
+        #     # Get all fields if True
+        #     fields = []
+        #     for m in measurements:
+        #         res = self.show_fields_in_measurement(bucket=bucket, measurement=m)
+        #         fields = fields + res
+        #     [print(f) for f in fields];
+        # else:
+        #     # Fields already defined in param
+        #     pass
         if fields:
             fieldstring = fluxql.filterstring(queryfor='_field', querylist=fields, type='or')
         else:
@@ -204,13 +221,15 @@ class dbcInflux:
 
         dataversionstring = ''
         if data_version:
-            dataversionstring = fluxql.filterstring(queryfor='data_version', querylist=[data_version], type='or')
+            dataversionstring = fluxql.filterstring(queryfor='data_version', querylist=data_version, type='or')
             querystring = f"{bucketstring} {rangestring} {measurementstring} " \
                           f"{dataversionstring} {fieldstring} {pivotstring}"
         else:
             # keepstring = f'|> keep(columns: ["_time", "_field", "_value", "units", "freq"])'
             querystring = f"{bucketstring} {rangestring} {measurementstring} " \
                           f"{fieldstring} {pivotstring}"
+
+        print(f"Using querystring:\n{querystring}")
 
         # Run database query
         client = get_client(self.conf_db)
@@ -392,7 +411,7 @@ class dbcInflux:
                 which corresponds to UTC+01:00, and all data between 1 Jun 2024 00:30 CET and
                 2 Jun 2024 12:00 CET should be deleted, then *timezone_offset_to_utc_hours=1*.
             data_version: version ID of the data that should be deleted,
-                e.g. 'meteoscreening', 'raw', 'myID', ...
+                e.g. 'meteoscreening_diive', 'raw', 'myID', ...
 
         Examples:
 
@@ -486,7 +505,7 @@ class dbcInflux:
     def show_config_for_filetype(self, filetype: str) -> dict:
         return self.conf_filetypes[filetype]
 
-    def show_fields_in_measurement(self, bucket: str, measurement: str, days: int = 9999) -> list:
+    def show_fields_in_measurement(self, bucket: str, measurement: str, days: int = 9999, verbose: int = 1) -> list:
         """Show fields (variable names) in measurement"""
         query = fluxql.fields_in_measurement(bucket=bucket, measurement=measurement, days=days)
         client = get_client(self.conf_db)
@@ -494,15 +513,16 @@ class dbcInflux:
         results = query_api.query_data_frame(query=query)
         client.close()
         fieldslist = results['_value'].tolist()
-        print(f"{'=' * 40}\nFields in measurement {measurement} of bucket {bucket}:")
-        for ix, f in enumerate(fieldslist, 1):
-            print(f"#{ix}  {bucket}  {measurement}  {f}")
-        print(f"Found {len(fieldslist)} fields in measurement {measurement} of bucket {bucket}.\n{'=' * 40}")
+        if verbose > 0:
+            print(f"{'=' * 40}\nFields in measurement {measurement} of bucket {bucket}:")
+            for ix, f in enumerate(fieldslist, 1):
+                print(f"#{ix}  {bucket}  {measurement}  {f}")
+            print(f"Found {len(fieldslist)} fields in measurement {measurement} of bucket {bucket}.\n{'=' * 40}")
         return fieldslist
 
     def show_fields_in_bucket(self, bucket: str, measurement: str = None, verbose: bool = True) -> list:
         """Show fields (variable names) in bucket (optional: for specific measurement)"""
-        query = fluxql.fields_in_bucket(bucket=bucket, measurement=measurement)
+        query = fluxql.fields_in_bucket(bucket=bucket)
         client = get_client(self.conf_db)
         query_api = get_query_api(client)
         results = query_api.query_data_frame(query=query)

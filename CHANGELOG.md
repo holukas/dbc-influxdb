@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.12.1 | XX Mar 2025
+
+- Updated notebook for downloading data (`notebooks/download_data.ipynb`)
+- Updated notebook for deleting data (`notebooks/delete_data.ipynb`)
+- Updated env
+
 ## v0.12.0 | 28 Aug 2024
 
 - Added method to delete data from the database (`dbc_influxdb.main.dbcInflux.delete`)

@@ -91,16 +91,20 @@ def download():
     Download data from database
     """
 
+    # TA_T1_2_1
+
     # Settings
-    SITE = 'ch-cha'  # Site name
+    SITE = 'ch-dav'  # Site name
     BUCKET = f'{SITE}_processed'
-    VAR1 = 'RH_T1_2_1'
-    DATA_VERSION = 'meteoscreening'
-    DIRCONF = r'F:\Sync\luhk_work\20 - CODING\22 - POET\configs'  # Folder with configurations
-    MEASUREMENTS = ['RH']  # Measurement name
-    FIELDS = [VAR1]  # Variable name; InfluxDB stores variable names as '_field'
-    START = '2022-04-01 00:00:01'  # Download data starting with this date
-    STOP = '2022-04-03 00:00:01'  # Download data before this date (the stop date itself is not included)
+    # VAR1 = 'TA_T1_2_1'
+    DATA_VERSION = ['meteoscreening_diive', 'meteoscreening_mst']
+    DIRCONF = r'L:\Sync\luhk_work\20 - CODING\22 - POET\configs'  # Folder with configurations
+    # MEASUREMENTS = True  # True downloads all measurements
+    MEASUREMENTS = ['SWC']  # Measurement name
+    FIELDS = None  # None means download all fields from measurements
+    # FIELDS = [VAR1]  # Variable name; InfluxDB stores variable names as '_field'
+    START = '2006-01-01 00:00:01'  # Download data starting with this date
+    STOP = '2025-01-01 00:00:01'  # Download data before this date (the stop date itself is not included)
     TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # Timezone, e.g. "1" is translated to timezone "UTC+01:00" (CET, winter time)
 
     # Instantiate class
@@ -118,7 +122,7 @@ def download():
             data_version=DATA_VERSION
         )
 
-    # data_simple.to_csv("F:\Downloads\_temp\del.csv")
+    data_simple.to_csv(r"F:\TMP\del.csv")
     print(data_simple)
 
 
@@ -201,25 +205,28 @@ def delete():
     """
 
     # Settings
-    # SITE = 'ch-cha'  # Site name
-    BUCKET = f'a'
-    VAR1 = 'TRH_M1_2_1'
-    VAR2 = 'TRH_T1_4_1'
-    DATA_VERSION = 'raw'
+    BUCKET = f'ch-dav_processed'
+    # BUCKET = f'ch-tan_raw'
+    # VAR1 = 'TRH_M1_2_1'
+    # VAR2 = 'TRH_T1_4_1'
+    # DATA_VERSION = 'raw'
+    DATA_VERSION = 'meteoscreening_mst'
+    # DATA_VERSION = 'fluxnet_v2024'
     # DATA_VERSION = 'eddypro_level-0'
+    # DATA_VERSION = 'ms_maier2022'
     DIRCONF = r'L:\Sync\luhk_work\20 - CODING\22 - POET\configs'  # Folder with configurations
-    # MEASUREMENTS = True
-    MEASUREMENTS = ['SW']  # Measurement name
+    MEASUREMENTS = True
+    # MEASUREMENTS = ['NETRAD']  # Measurement name
     FIELDS = True
     # FIELDS = [VAR1, VAR2]  # Variable name; InfluxDB stores variable names as '_field'
-    START = '2009-03-15 00:00:01'  # Download data starting with this date
-    STOP = '2011-03-25 00:00:01'  # Download data before this date (the stop date itself is not included)
+    START = '2021-01-01 00:00:01'  # Delete data starting with this date
+    STOP = '2022-01-01 00:00:01'  # Delete data before this date (the stop date itself is not included)
     TIMEZONE_OFFSET_TO_UTC_HOURS = 1  # Timezone, e.g. "1" is translated to timezone "UTC+01:00" (CET, winter time)
 
     # Instantiate class
     dbc = dbcInflux(dirconf=DIRCONF)
 
-    # Data download
+    # Delete data
     dbc.delete(
         bucket=BUCKET,
         measurements=MEASUREMENTS,
@@ -239,6 +246,6 @@ if __name__ == '__main__':
     pd.set_option('display.max_rows', 3000)
     pd.set_option('display.max_columns', 3000)
     # upload_specific_file()
-    # download()
-    delete()
+    download()
+    # delete()
     # download_and_reupload()
