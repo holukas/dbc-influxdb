@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.13.1 | 19 Mar 2025
+
+- Parameter `data_version` is converted to list if given as string (`dbc_influxdb.main.dbcInflux.download`)
+- Updated download notebooks
+
 ## v0.13.0 | 11 Mar 2025
 
 - Added parameter to download data for multiple data versions (`dbc_influxdb.main.dbcInflux.download`)
