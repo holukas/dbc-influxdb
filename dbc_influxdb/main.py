@@ -162,12 +162,16 @@ class dbcInflux:
                 and returned with the timestamp 'UTC+01:00', i.e. UTC + 1 hour, which
                 corresponds to CET (winter time)
             data_version: version ID of the data that should be downloaded,
-                e.g. 'meteoscreening'
+                e.g. ['meteoscreening']. If given as a string it is converted to a list
+                with the string as the list element.
             verify_freq: checks if the downloaded data has the expected frequency, given
                 as str in the format of pandas frequency strings, e.g., '30T' for 30-minute
                 data.
 
         """
+
+        if isinstance(data_version, str):
+            data_version = [data_version]
 
         fields_str = fields if fields else "ALL"
         measurements_str = measurements if measurements else "ALL"
