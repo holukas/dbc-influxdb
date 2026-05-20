@@ -1,13 +1,13 @@
 [tool.poetry]
 name = "dbc-influxdb"
-version = "0.13.1"
+version = "0.13.2"
 description = "Database communication with InfluxDB v2."
 authors = ["Lukas Hörtnagl <holukas@ethz.ch>"]
 readme = "README.md"
 packages = [{ include = "dbc_influxdb" }]
 
 [tool.poetry.dependencies]
-python = ">=3.9,<3.12"
+python = ">=3.9,<4.0.0"
 pyyaml = ">=6.0.1"
 pandas = ">=2.1.0"
 influxdb-client = ">=1.37.0"

@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.13.2 | 7 May 2025
+
+- Updated packages in env
+- Updated env
+
 ## v0.13.1 | 19 Mar 2025
 
 - Parameter `data_version` is converted to list if given as string (`dbc_influxdb.main.dbcInflux.download`)
