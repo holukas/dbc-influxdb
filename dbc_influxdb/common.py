@@ -21,30 +21,33 @@ tags = [
 ]
 
 
-def convert_ts_to_timezone(timezone_offset_to_utc_hours: int,
+def convert_ts_to_timezone(timezone_offset_to_utc_hours: int | float,
                            timestamp_index):
-    """Convert timestamp index to timezone
+    """Convert a UTC-aware timestamp to a fixed offset from UTC.
 
-    Convert 'TIMESTAMP_END' to desired timezone, e.g. to CET,
-    using the pytz package. pytz is quite flexible with GMT and fixed offsets,
-    and here(?) GMT is the same as UTC (no offset to UTC).
+    All data in the database are stored in UTC. This converts a UTC-aware
+    timestamp (Series/DatetimeIndex) to the timezone given as a fixed offset to
+    UTC in hours, e.g. ``1`` for CET (winter time), ``-5`` for US Eastern
+    (winter time), or ``5.5`` for India.
 
-    From: https://pvlib-python.readthedocs.io/en/v0.3.0/timetimezones.html#fixed-offsets:
-      "The 'Etc/GMT*' time zones mentioned above provide fixed offset
-      specifications, but watch out for the counter-intuitive sign convention."
+    A *fixed* offset is applied exactly as given (no daylight-saving
+    transitions). Negative and fractional offsets are supported; fractional
+    hours are rounded to the nearest minute.
 
-    :param timezone_offset_to_utc_hours:
-    :param timestamp_index:
-    :return:
+    Note:
+        Previously this used pytz' ``Etc/GMT*`` zones, which carry a
+        counter-intuitive reversed sign convention. ``pytz.FixedOffset`` is used
+        instead — it gives identical results for whole-hour offsets but is
+        clearer and also handles fractional offsets.
+
+    Args:
+        timezone_offset_to_utc_hours: offset to UTC in hours (may be negative or
+            fractional), e.g. ``1`` for UTC+01:00.
+        timestamp_index: a pandas Series/DatetimeIndex with tz-aware (UTC)
+            timestamps.
+
+    Returns:
+        The timestamps converted to the requested fixed offset.
     """
-
-    # Sign convention in pytz is reversed: '+1' for CET must be '-1' when used with GMT here
-    sign = '-' if timezone_offset_to_utc_hours >= 0 else '+'
-
-    # Specify pytz timezone in relation to the GMT timezone (same as UTC)
-    requested_timezone_pytz = f'Etc/GMT{sign}{abs(timezone_offset_to_utc_hours)}'
-
-    # Convert TIMESTAMP_END to requested timezone
-    timezoned_ix = timestamp_index.dt.tz_convert(pytz.timezone(requested_timezone_pytz))
-
-    return timezoned_ix
+    offset_minutes = round(timezone_offset_to_utc_hours * 60)
+    return timestamp_index.dt.tz_convert(pytz.FixedOffset(offset_minutes))

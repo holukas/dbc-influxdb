@@ -29,13 +29,17 @@ class dbcInflux:
         self._test_connection_to_db()
 
     @staticmethod
-    def _format_utc_offset(timezone_offset_to_utc_hours: int) -> str:
-        """Format an integer hour offset as an ISO 8601 UTC offset string.
+    def _format_utc_offset(timezone_offset_to_utc_hours: int | float) -> str:
+        """Format an hour offset as an ISO 8601 UTC offset string.
 
-        e.g. ``1`` -> ``'+01:00'``, ``-5`` -> ``'-05:00'``, ``10`` -> ``'+10:00'``.
+        Supports negative and fractional offsets; fractional hours are rounded
+        to the nearest minute. e.g. ``1`` -> ``'+01:00'``, ``-5`` -> ``'-05:00'``,
+        ``10`` -> ``'+10:00'``, ``5.5`` -> ``'+05:30'``.
         """
-        sign = '+' if timezone_offset_to_utc_hours >= 0 else '-'
-        return f"{sign}{abs(timezone_offset_to_utc_hours):02d}:00"
+        total_minutes = round(timezone_offset_to_utc_hours * 60)
+        sign = '+' if total_minutes >= 0 else '-'
+        hours, minutes = divmod(abs(total_minutes), 60)
+        return f"{sign}{hours:02d}:{minutes:02d}"
 
     def _add_timestamp_utc(self, timestamp_index, timezone_offset_to_utc_hours) -> pd.DatetimeIndex:
         # Needs to be in format '2022-05-27 00:00:00+01:00' for InfluxDB
@@ -47,7 +51,7 @@ class dbcInflux:
                          var_df: DataFrame,
                          to_bucket: str,
                          to_measurement: str,
-                         timezone_offset_to_utc_hours: int,
+                         timezone_offset_to_utc_hours: int | float,
                          delete_from_db_before_upload: bool = True):
         """Upload single variable to database.
 
@@ -138,7 +142,7 @@ class dbcInflux:
                  bucket: str,
                  start: str,
                  stop: str,
-                 timezone_offset_to_utc_hours: int,  # v0.3.0
+                 timezone_offset_to_utc_hours: int | float,  # v0.3.0
                  data_version: list = None,
                  measurements: list = None,
                  fields: list = None,
@@ -197,13 +201,13 @@ class dbcInflux:
 
         # Measurements
         if measurements:
-            measurementstring = fluxql.filterstring(queryfor='_measurement', querylist=measurements, type='or')
+            measurementstring = fluxql.filterstring(queryfor='_measurement', querylist=measurements, logic='or')
         else:
             measurementstring = ''  # Empty means all measurements
 
         # Fields
         if fields:
-            fieldstring = fluxql.filterstring(queryfor='_field', querylist=fields, type='or')
+            fieldstring = fluxql.filterstring(queryfor='_field', querylist=fields, logic='or')
         else:
             fieldstring = ''  # Empty means all fields
 
@@ -211,7 +215,7 @@ class dbcInflux:
 
         dataversionstring = ''
         if data_version:
-            dataversionstring = fluxql.filterstring(queryfor='data_version', querylist=data_version, type='or')
+            dataversionstring = fluxql.filterstring(queryfor='data_version', querylist=data_version, logic='or')
             querystring = f"{bucketstring} {rangestring} {measurementstring} " \
                           f"{dataversionstring} {fieldstring} {pivotstring}"
         else:
@@ -236,6 +240,14 @@ class dbcInflux:
         # single dataframes are converted to a list, in which case the list
         # contains only one element: the dataframe of the single variable.
         tables = [tables] if not isinstance(tables, list) else tables
+
+        # No data in the requested range: query_data_frame returns an empty
+        # DataFrame (without the expected columns). Return empty results in that
+        # case instead of raising when accessing '_measurement' below.
+        tables = [t for t in tables if not t.empty and '_measurement' in t.columns]
+        if not tables:
+            log.info("No data found for the requested query.")
+            return DataFrame(), {}, {}
 
         # Each table in tables contains data for one variable
         found_measurements = []
@@ -361,7 +373,7 @@ class dbcInflux:
                measurements: list | bool,
                start: str,
                stop: str,
-               timezone_offset_to_utc_hours: int,  # v0.3.0
+               timezone_offset_to_utc_hours: int | float,  # v0.3.0
                data_version: str,
                fields: list | bool) -> None:
         """
@@ -410,6 +422,17 @@ class dbcInflux:
         - https://docs.influxdata.com/influxdb/v2/reference/syntax/delete-predicate/
 
         """
+
+        # Validate destructive inputs up front. Anything falsy-but-not-True
+        # (None, False, empty list) is rejected so we never silently delete
+        # nothing while logging a successful deletion, and never iterate over a
+        # non-iterable bool.
+        if not measurements:
+            raise ValueError("`measurements` must be a non-empty list of measurement "
+                             "names or True (all measurements).")
+        if not fields:
+            raise ValueError("`fields` must be a non-empty list of field names or "
+                             "True (all fields).")
 
         # InfluxDB needs ISO 8601 date format (in requested timezone) for query
         start_iso = self._convert_datestr_to_iso8601(datestr=start,
@@ -563,11 +586,14 @@ class dbcInflux:
     def _test_connection_to_db(self):
         """Connect to database"""
         with get_client(self.conf_db) as client:
-            client.ping()
+            if not client.ping():
+                raise ConnectionError(
+                    "Could not connect to the InfluxDB database (ping failed). "
+                    "Check the connection settings in dbconf.yaml (url, org, token).")
         log.info("Connection to database works.")
 
     @staticmethod
-    def _convert_datestr_to_iso8601(datestr: str, timezone_offset_to_utc_hours: int) -> str:
+    def _convert_datestr_to_iso8601(datestr: str, timezone_offset_to_utc_hours: int | float) -> str:
         """Convert date string to ISO 8601 format
 
         Needed for InfluxDB query.

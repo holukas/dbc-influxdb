@@ -16,6 +16,8 @@ class TestUtcOffsetFormatting:
         (10, "+10:00"),
         (-1, "-01:00"),
         (-5, "-05:00"),
+        (5.5, "+05:30"),
+        (-3.5, "-03:30"),
     ])
     def test_format_utc_offset(self, hours, expected):
         assert dbcInflux._format_utc_offset(hours) == expected
@@ -39,6 +41,17 @@ class TestConvertTsToTimezone:
         s = pd.Series(pd.to_datetime(["2022-01-01 00:00:00"]).tz_localize("UTC"))
         result = convert_ts_to_timezone(timezone_offset_to_utc_hours=-5, timestamp_index=s)
         assert result.iloc[0].utcoffset() == dt.timedelta(hours=-5)
+
+    def test_fractional_offset(self):
+        s = pd.Series(pd.to_datetime(["2022-01-01 00:00:00"]).tz_localize("UTC"))
+        result = convert_ts_to_timezone(timezone_offset_to_utc_hours=5.5, timestamp_index=s)
+        assert result.iloc[0].utcoffset() == dt.timedelta(hours=5, minutes=30)
+
+    def test_shifts_clock_value(self):
+        # offset +1 must move a 12:00 UTC timestamp to 13:00 local
+        s = pd.Series(pd.to_datetime(["2022-01-01 12:00:00"]).tz_localize("UTC"))
+        result = convert_ts_to_timezone(timezone_offset_to_utc_hours=1, timestamp_index=s)
+        assert result.iloc[0].hour == 13
 
 
 class TestFluxQL:
@@ -79,3 +92,66 @@ def test_tags_is_list_of_str():
     assert isinstance(tags, list)
     assert all(isinstance(t, str) for t in tags)
     assert "varname" in tags
+
+
+def _bare_dbc():
+    """Create a dbcInflux instance without running __init__ (no DB connection)."""
+    return dbcInflux.__new__(dbcInflux)
+
+
+class TestDownloadEmptyResult:
+    def test_empty_result_returns_empty(self, monkeypatch):
+        dbc = _bare_dbc()
+        # query returns an empty DataFrame (no data in range)
+        monkeypatch.setattr(dbc, "_query_df", lambda query: pd.DataFrame())
+        data_simple, data_detailed, assigned = dbc.download(
+            bucket="b",
+            start="2022-01-01 00:00:00",
+            stop="2022-01-02 00:00:00",
+            timezone_offset_to_utc_hours=1,
+        )
+        assert data_simple.empty
+        assert data_detailed == {}
+        assert assigned == {}
+
+
+class TestDeleteValidation:
+    @pytest.mark.parametrize("measurements,fields", [
+        (None, True),
+        (False, True),
+        ([], True),
+        (True, None),
+        (True, False),
+        (True, []),
+    ])
+    def test_invalid_inputs_raise(self, measurements, fields):
+        dbc = _bare_dbc()
+        with pytest.raises(ValueError):
+            dbc.delete(
+                bucket="b",
+                measurements=measurements,
+                start="2022-01-01 00:00:00",
+                stop="2022-01-02 00:00:00",
+                timezone_offset_to_utc_hours=1,
+                data_version="raw",
+                fields=fields,
+            )
+
+
+class TestUploadValidation:
+    def test_missing_tag_columns_raises(self):
+        dbc = _bare_dbc()
+        df = pd.DataFrame({"TA": [1.0]}, index=pd.to_datetime(["2022-01-01"]))
+        with pytest.raises(ValueError):
+            dbc.upload_singlevar(df, to_bucket="b", to_measurement="TA",
+                                 timezone_offset_to_utc_hours=1)
+
+    def test_multiple_fields_raises(self):
+        dbc = _bare_dbc()
+        data = {t: ["x"] for t in tags}
+        data["TA"] = [1.0]
+        data["SW"] = [2.0]
+        df = pd.DataFrame(data, index=pd.to_datetime(["2022-01-01"]))
+        with pytest.raises(ValueError):
+            dbc.upload_singlevar(df, to_bucket="b", to_measurement="TA",
+                                 timezone_offset_to_utc_hours=1)

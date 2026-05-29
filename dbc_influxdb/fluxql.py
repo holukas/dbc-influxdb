@@ -1,3 +1,14 @@
+"""Construction of Flux query strings.
+
+Note:
+    These helpers build Flux queries by interpolating the given bucket,
+    measurement, field and data-version names directly into the query string
+    without escaping. They assume *trusted* input (names originate from the
+    local config files / the caller, not from untrusted external sources). Do
+    not pass unsanitised user input.
+"""
+
+
 def pivotstring():
     return f'|> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")'
 
@@ -10,13 +21,15 @@ def rangestring(start: str, stop: str) -> str:
     return f'|> range(start: {start}, stop: {stop})'
 
 
-def filterstring(queryfor: str, querylist: list, type: str) -> str:
+def filterstring(queryfor: str, querylist: list, logic: str) -> str:
+    """Build a Flux ``filter()`` that matches *queryfor* against any value in
+    *querylist*, combined with the given *logic* operator (e.g. ``'or'``)."""
     filterstring = ''  # Query string
     for ix, var in enumerate(querylist):
         if ix == 0:
             filterstring += f'|> filter(fn: (r) => r["{queryfor}"] == "{var}"'
         else:
-            filterstring += f' {type} r["{queryfor}"] == "{var}"'
+            filterstring += f' {logic} r["{queryfor}"] == "{var}"'
     filterstring = f"{filterstring})"  # Needs bracket at end
     return filterstring
 

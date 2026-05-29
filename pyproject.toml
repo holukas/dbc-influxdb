@@ -1,6 +1,6 @@
 [project]
 name = "dbc-influxdb"
-version = "0.14.0"
+version = "0.15.0"
 description = "Database communication with InfluxDB v2."
 authors = [{ name = "Lukas Hörtnagl", email = "holukas@ethz.ch" }]
 readme = "README.md"
