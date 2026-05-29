@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.14.0 | 29 May 2026
+
+- Migrated dependency management from `poetry` to `uv` (`uv.lock`, PEP 621 `pyproject.toml`, `hatchling` build backend)
+- Bumped minimum Python to 3.12 (`requires-python = ">=3.12,<4.0.0"`); added `.python-version` pinned to `3.12`
+- Added `pytz` as an explicit dependency (`pyproject.toml`). It was previously pulled in transitively via `pandas`, but `pandas` 3.0 no longer depends on it while `dbc_influxdb.common` imports it directly
+- Updated packages in env (notably `pandas` 3.0, `numpy` 2.4, `pytest` 9)
+
 ## v0.13.2 | 7 May 2025
 
 - Updated packages in env
