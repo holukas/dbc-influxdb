@@ -1,8 +1,3 @@
-def dropstring():
-    return f'|> drop(columns: ["_start", "_stop"])'
-    # return f'|> drop(columns: ["_start", "_stop", "_measurement"])'
-
-
 def pivotstring():
     return f'|> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")'
 

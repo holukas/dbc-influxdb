@@ -1,0 +1,8 @@
+# Unit mapping: raw unit string (as found in data files) -> standardized unit string.
+# Used by dbcInflux to normalize units. If a raw unit maps to an empty value,
+# the raw unit is kept as-is.
+degC: degC
+'%': prc
+W m-2: W m-2
+mm: mm
+hPa: hPa

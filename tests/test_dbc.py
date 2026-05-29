@@ -1,12 +1,21 @@
+"""Integration test that requires a live InfluxDB and local config files.
+
+Skipped automatically when the configuration directory is not present (e.g. in
+CI), so it does not break test runs on machines without database access.
+"""
 import unittest
+from pathlib import Path
 
 from dbc_influxdb.main import dbcInflux
 
+DIRCONF = r'L:\Dropbox\luhk_work\20 - CODING\22 - POET\configs'
 
+
+@unittest.skipUnless(Path(DIRCONF).exists(),
+                     f"Config directory not found ({DIRCONF}); skipping live DB test.")
 class DatabaseConnection(unittest.TestCase):
     def test_db_connection(self):
-        dirconf = r'L:\Dropbox\luhk_work\20 - CODING\22 - POET\configs'
-        dbc = dbcInflux(dirconf=dirconf)
+        dbc = dbcInflux(dirconf=DIRCONF)
         bucketlist = dbc.show_buckets()
         measurements = dbc.show_measurements_in_bucket(bucket='ch-aws_raw')
         fieldslist = dbc.show_fields_in_bucket(bucket='ch-aws_raw')
@@ -16,7 +25,6 @@ class DatabaseConnection(unittest.TestCase):
         self.assertEqual(type(measurements), list)
         self.assertEqual(type(fieldslist), list)
         self.assertEqual(type(fieldslist2), list)
-        # self.assertEqual(True, False)  # add assertion here
 
 
 if __name__ == '__main__':

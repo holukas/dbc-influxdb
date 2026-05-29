@@ -1,0 +1,14 @@
+# One filetype definition per file. The single top-level key is the filetype name,
+# which becomes a key in dbcInflux.show_configs_filetypes().
+EXAMPLE-FILETYPE-30MIN:
+  filegroup: example
+  data_version: raw
+  data_special_format: false          # e.g. '-ICOSSEQ-' for special row-based formats
+  data_vars_parse_pos_indices: true   # parse hpos/vpos/repl from the variable name
+  data_vars:
+    TA_T1_2_1:                        # raw variable name as found in the data file
+      field: TA_T1_2_1                # standardized variable name (stored as _field)
+      measurement: TA
+      units: degC
+      gain: 1
+      # ignore_after: '2024-01-01 00:00:00'   # optional: drop data after this datetime

@@ -33,10 +33,13 @@ Always run Python/tooling through `uv run` so the locked environment is used.
 - `dbc_influxdb/db.py` — InfluxDB client/query/delete API helpers.
 - `dbc_influxdb/fluxql.py` — Flux query construction.
 - `dbc_influxdb/common.py` — shared helpers (tags, timezone conversion via `pytz`).
-- `dbc_influxdb/varscanner.py`, `manual_run.py` — supporting modules.
-- `tests/test_dbc.py` — tests. Note `test_db_connection` requires an external
-  config directory and a live InfluxDB instance, so it fails in environments
-  without them; this is expected and unrelated to code changes.
+- `dbc_influxdb/config.py` — YAML config readers and the expected config layout.
+- `dbc_influxdb/logger.py` — package logger + `setup_logging()` (rich console output).
+- `tests/test_unit.py` — DB-free unit tests (fluxql, timezone, freq verification).
+- `tests/test_dbc.py` — live integration test; auto-skips when the config
+  directory / InfluxDB instance is not available.
+- `examples/manual_run.py` — hand-run usage examples (not imported by the package).
+- `example_configs/` — templates documenting the `dirconf` + `<dirconf>_secret` layout.
 - `notebooks/` — example download/delete workflows.
 
 ## Conventions

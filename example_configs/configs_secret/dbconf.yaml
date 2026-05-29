@@ -1,0 +1,5 @@
+# InfluxDB 2.x connection settings.
+# This file lives in the "<dirconf>_secret" sibling directory, NOT inside <dirconf>.
+url: http://localhost:8086
+org: my-org
+token: my-secret-token

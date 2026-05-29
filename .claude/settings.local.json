@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(uv run pytest -q 2>&1)",
+      "PowerShell(uv run python -c \"from dbc_influxdb import dbcInflux; print\\('ok'\\)\" 2>&1)"
+    ]
+  }
+}

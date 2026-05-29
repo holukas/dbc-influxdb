@@ -7,6 +7,27 @@
 - Added `pytz` as an explicit dependency (`pyproject.toml`). It was previously pulled in transitively via `pandas`, but `pandas` 3.0 no longer depends on it while `dbc_influxdb.common` imports it directly
 - Updated packages in env (notably `pandas` 3.0, `numpy` 2.4, `pytest` 9)
 
+### Bug fixes
+
+- `upload_singlevar` now passes the caller's `timezone_offset_to_utc_hours` to the internal pre-upload `delete` call instead of a hardcoded `1`. Previously the delete window used the wrong timezone whenever a non-`1` offset was used
+- Fixed malformed UTC offset strings for negative timezone offsets (e.g. `-5` produced `--5:00`). A single helper `_format_utc_offset` now formats offsets, and `convert_ts_to_timezone` was corrected for negative offsets
+- Fixed the `verify_freq` option in `download`: it imported a non-existent function and always raised. It now verifies the inferred frequency against the expected one and logs a warning on mismatch
+
+### Refactoring / structure
+
+- Removed the deprecated `VarScanner` (`dbc_influxdb/varscanner.py`); it was unused and already marked deleted in v0.12.0
+- Moved `manual_run.py` out of the package to `examples/` and updated it to the current API (removed calls to the removed `readfile`/`upload_filetype`)
+- Moved YAML config reading to `dbc_influxdb/config.py` (documents the `dirconf` + `<dirconf>_secret` layout); removed the duplicate `_read_configfile`
+- Added `dbc_influxdb/logger.py` with `setup_logging()` (rich console output); replaced `print` calls with package logging; added `rich` dependency
+- Added DB-free unit tests (`tests/test_unit.py`); the live integration test (`tests/test_dbc.py`) now auto-skips when the config directory is unavailable
+- Added `example_configs/` templates documenting the configuration layout
+- Stopped tracking build artifacts under `dist/` (already gitignored)
+- Cleaned up: fixed misleading `list or True` type hints (`list | bool`), removed large blocks of commented-out dead code, made `verbose` parameters consistently `bool`
+- Database clients are now opened via context managers (`with get_client(...)`) so connections are closed even if a query/delete/ping raises; extracted a shared `_query_df` helper to remove duplicated client boilerplate across the `show_*`/`download` methods
+- `show_fields_in_bucket(measurement=...)` now actually filters by measurement (the argument was previously accepted but ignored)
+- `upload_singlevar` no longer mutates the caller's DataFrame (operates on a copy) and raises `ValueError` (instead of bare `Exception`) on invalid input
+- Removed unused `fluxql.dropstring()` and the unused `dbcInflux.script_id` attribute
+
 ## v0.13.2 | 7 May 2025
 
 - Updated packages in env

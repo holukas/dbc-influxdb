@@ -42,7 +42,7 @@ def convert_ts_to_timezone(timezone_offset_to_utc_hours: int,
     sign = '-' if timezone_offset_to_utc_hours >= 0 else '+'
 
     # Specify pytz timezone in relation to the GMT timezone (same as UTC)
-    requested_timezone_pytz = f'Etc/GMT{sign}{timezone_offset_to_utc_hours}'
+    requested_timezone_pytz = f'Etc/GMT{sign}{abs(timezone_offset_to_utc_hours)}'
 
     # Convert TIMESTAMP_END to requested timezone
     timezoned_ix = timestamp_index.dt.tz_convert(pytz.timezone(requested_timezone_pytz))

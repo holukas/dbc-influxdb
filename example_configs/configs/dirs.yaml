@@ -1,0 +1,4 @@
+# Directory settings. Read on startup and exposed via dbcInflux.show_configs_dirs().
+# Adjust keys/values to your environment as needed.
+data: /path/to/data
+out: /path/to/output
