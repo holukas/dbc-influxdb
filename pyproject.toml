@@ -1,6 +1,6 @@
 [project]
 name = "dbc-influxdb"
-version = "0.15.0"
+version = "0.14.0"
 description = "Database communication with InfluxDB v2."
 authors = [{ name = "Lukas Hörtnagl", email = "holukas@ethz.ch" }]
 readme = "README.md"
@@ -11,7 +11,18 @@ dependencies = [
     "influxdb-client>=1.37.0",
     "pytz>=2024.1",
     "rich>=15.0.0",
+    "textual>=8.2.7",
 ]
+
+[project.optional-dependencies]
+# Optional terminal UI (Textual). Install with: uv sync --extra tui
+# or, for users of the published package: pip install "dbc-influxdb[tui]"
+tui = [
+    "textual>=0.80.0",
+]
+
+[project.scripts]
+dbc-influxdb-tui = "dbc_influxdb.tui:main"
 
 [dependency-groups]
 dev = [
@@ -19,6 +30,8 @@ dev = [
     "twine>=4.0.1",
     "jupyterlab>=4.0.6",
     "matplotlib>=3.9.2",
+    "textual>=0.80.0",
+    "textual-dev>=1.5.0",
 ]
 
 [build-system]

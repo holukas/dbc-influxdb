@@ -110,6 +110,36 @@ dbc.show_configs_unitmapper()
 dbc.show_configs_dirs()
 ```
 
+## Terminal UI (TUI)
+
+An interactive terminal UI (built with [Textual](https://textual.textualize.io/))
+is available for browsing a bucket's measurements/fields and **downloading** or
+**deleting** data without writing a script:
+
+```bash
+dbc-influxdb-tui --dirconf path/to/configs
+# or
+uv run python -m dbc_influxdb.tui --dirconf path/to/configs
+```
+
+The config directory can also be supplied via the `DBC_DIRCONF` environment
+variable.
+
+To just see what the UI looks like — no config files and no database connection
+required — launch it in demo mode with built-in sample data:
+
+```bash
+dbc-influxdb-tui --demo
+# or
+uv run python -m dbc_influxdb.tui --demo
+```
+
+In demo mode the buckets/measurements/fields are fabricated and Download/Delete
+are simulated. Pick a bucket to populate its measurements, optionally narrow down to
+specific measurements/fields, set the date range and timezone offset, then
+Download or Delete. Deletes always show the matched scope and require explicit
+confirmation in a modal first.
+
 ## Notebooks
 
 Example workflows for downloading and deleting data are available in the

@@ -1,46 +1,23 @@
 # Changelog
 
-## v0.15.0 | XX Jun 2026
-
-### Bug fixes
-
-- `download` no longer crashes when a query returns no data. Previously an empty
-  result raised `KeyError` on `_measurement`; it now logs an info message and
-  returns empty results (`(empty DataFrame, {}, {})`)
-- `delete` now validates its `measurements` and `fields` arguments up front and
-  raises `ValueError` for invalid input (`None`/`False`/empty list). Previously
-  such input could silently delete nothing while still logging a successful
-  deletion, or raise `TypeError` while iterating
-- `_test_connection_to_db` now raises `ConnectionError` when `client.ping()`
-  returns `False` instead of silently reporting a working connection
-
-### Timezone handling
-
-- `convert_ts_to_timezone` now uses `pytz.FixedOffset` instead of constructing
-  `Etc/GMT*` zone strings (which carry a counter-intuitive reversed sign). The
-  result is identical for whole-hour offsets (verified for the common `+1`/CET
-  case and others) but the implementation is clearer and now also supports
-  negative and fractional offsets (e.g. `5.5`)
-- `_format_utc_offset` now supports fractional hour offsets (e.g. `5.5` ->
-  `'+05:30'`); whole-hour output is unchanged
-- Timezone-offset parameters are now typed `int | float` across the public API
-
-### Refactoring / structure
-
-- Renamed the `type` parameter of `fluxql.filterstring` to `logic` (it shadowed
-  the builtin); added a module docstring noting query strings assume trusted input
-- Removed leftover commented-out dead code in `dbc_influxdb/db.py`
-  (`WriteOptions` import and `get_write_api`)
-- Added DB-free unit tests for the empty-`download` path, `delete`/`upload_singlevar`
-  input validation, and fractional timezone offsets
-
 ## v0.14.0 | XX Jun 2026
 
 - Migrated dependency management from `poetry` to `uv` (`uv.lock`, PEP 621 `pyproject.toml`, `hatchling` build backend)
 - Bumped minimum Python to 3.12 (`requires-python = ">=3.12,<4.0.0"`); added `.python-version` pinned to `3.12`
 - Added `pytz` as an explicit dependency (`pyproject.toml`). It was previously pulled in transitively via `pandas`, but
   `pandas` 3.0 no longer depends on it while `dbc_influxdb.common` imports it directly
+- Added `textual` as a dependency for the new terminal UI (see below)
 - Updated packages in env (notably `pandas` 3.0, `numpy` 2.4, `pytest` 9)
+
+### New features
+
+- Added an interactive terminal UI (`dbc_influxdb/tui.py`, built with
+  [Textual](https://textual.textualize.io/)) for browsing a bucket's measurements/fields and downloading or deleting
+  data. Launch via the `dbc-influxdb-tui` console script (or `python -m dbc_influxdb.tui`) with `--dirconf` / the
+  `DBC_DIRCONF` environment variable. All database calls run in worker threads so the UI never blocks, and deletes
+  require explicit confirmation in a modal showing the matched scope. A `--demo` flag launches the UI with built-in
+  sample data and no config/database (download/delete simulated), just to preview the interface. Added DB-free headless
+  smoke tests (`tests/test_tui.py`)
 
 ### Bug fixes
 
@@ -50,6 +27,21 @@
   `_format_utc_offset` now formats offsets, and `convert_ts_to_timezone` was corrected for negative offsets
 - Fixed the `verify_freq` option in `download`: it imported a non-existent function and always raised. It now verifies
   the inferred frequency against the expected one and logs a warning on mismatch
+- `download` no longer crashes when a query returns no data. Previously an empty result raised `KeyError` on
+  `_measurement`; it now logs an info message and returns empty results (`(empty DataFrame, {}, {})`)
+- `delete` now validates its `measurements` and `fields` arguments up front and raises `ValueError` for invalid input
+  (`None`/`False`/empty list). Previously such input could silently delete nothing while still logging a successful
+  deletion, or raise `TypeError` while iterating
+- `_test_connection_to_db` now raises `ConnectionError` when `client.ping()` returns `False` instead of silently
+  reporting a working connection
+
+### Timezone handling
+
+- `convert_ts_to_timezone` now uses `pytz.FixedOffset` instead of building `Etc/GMT*` zone strings (which carry a
+  counter-intuitive reversed sign). Identical result for whole-hour offsets (verified for the common `+1`/CET case and
+  others), but clearer and now also supports negative and fractional offsets (e.g. `5.5`)
+- `_format_utc_offset` now supports fractional hour offsets (e.g. `5.5` -> `'+05:30'`); whole-hour output is unchanged
+- Timezone-offset parameters are now typed `int | float` across the public API
 
 ### Refactoring / structure
 
@@ -75,6 +67,11 @@
 - `upload_singlevar` no longer mutates the caller's DataFrame (operates on a copy) and raises `ValueError` (instead of
   bare `Exception`) on invalid input
 - Removed unused `fluxql.dropstring()` and the unused `dbcInflux.script_id` attribute
+- Renamed the `type` parameter of `fluxql.filterstring` to `logic` (it shadowed the builtin); added a module docstring
+  noting Flux query strings assume trusted input
+- Removed leftover commented-out dead code in `dbc_influxdb/db.py` (`WriteOptions` import and `get_write_api`)
+- Extended the DB-free unit tests to cover the empty-`download` path, `delete`/`upload_singlevar` input validation, and
+  fractional timezone offsets
 
 ## v0.13.2 | 7 May 2025
 
