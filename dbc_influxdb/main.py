@@ -26,7 +26,7 @@ class dbcInflux:
             self.conf_dirs, \
             self.conf_db = self._read_configs()
 
-        self._test_connection_to_db()
+        self.test_connection()
 
     @staticmethod
     def _format_utc_offset(timezone_offset_to_utc_hours: int | float) -> str:
@@ -500,11 +500,16 @@ class dbcInflux:
         return self.conf_filetypes[filetype]
 
     def show_fields_in_measurement(self, bucket: str, measurement: str, days: int = 9999,
-                                   verbose: bool = True) -> list:
-        """Show fields (variable names) in measurement"""
-        query = fluxql.fields_in_measurement(bucket=bucket, measurement=measurement, days=days)
-        results = self._query_df(query)
-        fieldslist = results['_value'].tolist()
+                                   data_version: str = None, verbose: bool = True) -> list:
+        """Show fields (variable names) in measurement, optionally narrowed to one
+        *data_version*."""
+        if data_version:
+            query = fluxql.fields_for_version(bucket=bucket, measurement=measurement,
+                                              data_version=data_version, days=days)
+            fieldslist = self._tag_value_list(self._query_df(query))
+        else:
+            query = fluxql.fields_in_measurement(bucket=bucket, measurement=measurement, days=days)
+            fieldslist = self._query_df(query)['_value'].tolist()
         if verbose:
             log.info(f"{'=' * 40}\nFields in measurement {measurement} of bucket {bucket}:")
             for ix, f in enumerate(fieldslist, 1):
@@ -527,11 +532,15 @@ class dbcInflux:
             log.info(f"Found {len(fieldslist)} variables (fields) in bucket {bucket}.\n{'=' * 40}")
         return fieldslist
 
-    def show_measurements_in_bucket(self, bucket: str, verbose: bool = True) -> list:
-        """Show measurements in bucket"""
-        query = fluxql.measurements_in_bucket(bucket=bucket)
-        results = self._query_df(query)
-        measurements = results['_value'].tolist()
+    def show_measurements_in_bucket(self, bucket: str, data_version: str = None,
+                                    verbose: bool = True) -> list:
+        """Show measurements in bucket, optionally narrowed to one *data_version*."""
+        if data_version:
+            query = fluxql.measurements_for_version(bucket=bucket, data_version=data_version)
+            measurements = self._tag_value_list(self._query_df(query))
+        else:
+            query = fluxql.measurements_in_bucket(bucket=bucket)
+            measurements = self._query_df(query)['_value'].tolist()
         if verbose:
             log.info(f"{'=' * 40}\nMeasurements in bucket {bucket}:")
             for ix, m in enumerate(measurements, 1):
@@ -550,6 +559,41 @@ class dbcInflux:
             log.info(f"#{ix}  {b}")
         log.info(f"Found {len(bucketlist)} buckets in database.")
         return bucketlist
+
+    @staticmethod
+    def _tag_value_list(results) -> list:
+        """Extract the distinct values from a ``schema.tagValues`` result frame.
+
+        Returns an empty list when the query found nothing (an empty frame has
+        no ``_value`` column).
+        """
+        if hasattr(results, "columns") and "_value" in results.columns:
+            return results["_value"].tolist()
+        return []
+
+    def show_data_versions_in_bucket(self, bucket: str, days: int = 9999,
+                                     verbose: bool = True) -> list:
+        """Show distinct data versions (``data_version`` tag) in *bucket*."""
+        query = fluxql.data_versions_in_bucket(bucket=bucket, days=days)
+        versions = self._tag_value_list(self._query_df(query))
+        if verbose:
+            log.info(f"{'=' * 40}\nData versions in bucket {bucket}:")
+            for ix, v in enumerate(versions, 1):
+                log.info(f"#{ix}  {bucket}  {v}")
+            log.info(f"Found {len(versions)} data versions in bucket {bucket}.\n{'=' * 40}")
+        return versions
+
+    def show_units_in_field(self, bucket: str, measurement: str, field: str,
+                            data_version: str = None, days: int = 9999,
+                            verbose: bool = True) -> list:
+        """Show distinct units (``units`` tag) for *field* of *measurement*,
+        optionally narrowed to one *data_version*."""
+        query = fluxql.units_in_field(bucket=bucket, measurement=measurement,
+                                      field=field, data_version=data_version, days=days)
+        units = self._tag_value_list(self._query_df(query))
+        if verbose:
+            log.info(f"Units for {bucket} / {measurement} / {field}: {units}")
+        return units
 
     def _read_configs(self):
         """Read all YAML configuration files from *dirconf* and its secret sibling.
@@ -583,14 +627,21 @@ class dbcInflux:
             query_api = get_query_api(client)
             return query_api.query_data_frame(query=query)
 
-    def _test_connection_to_db(self):
-        """Connect to database"""
+    def test_connection(self):
+        """Verify the database is reachable by pinging it.
+
+        Raises ``ConnectionError`` if the ping fails (bad url/org/token in
+        ``dbconf.yaml`` or an unreachable server).
+        """
         with get_client(self.conf_db) as client:
             if not client.ping():
                 raise ConnectionError(
                     "Could not connect to the InfluxDB database (ping failed). "
                     "Check the connection settings in dbconf.yaml (url, org, token).")
         log.info("Connection to database works.")
+
+    #: Backwards-compatible alias for the previously private method name.
+    _test_connection_to_db = test_connection
 
     @staticmethod
     def _convert_datestr_to_iso8601(datestr: str, timezone_offset_to_utc_hours: int | float) -> str:
